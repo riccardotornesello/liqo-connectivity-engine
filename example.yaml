@@ -1,0 +1,6 @@
+apiVersion: security.liqo.io/v1
+kind: PeeringSecurity
+metadata:
+  name: example-peeringsecurity
+spec:
+  tunnelPolicy: Allow

@@ -24,21 +24,58 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // TunnelPolicy defines the policy for the tunnel
-// +kubebuilder:validation:Enum=Allow;Deny
+// +kubebuilder:validation:Enum=allow;deny
 type TunnelPolicy string
 
 const (
 	// TunnelPolicyAllow allows traffic through the tunnel
-	TunnelPolicyAllow TunnelPolicy = "Allow"
+	TunnelPolicyAllow TunnelPolicy = "allow"
 	// TunnelPolicyDeny denies traffic through the tunnel
-	TunnelPolicyDeny TunnelPolicy = "Deny"
+	TunnelPolicyDeny TunnelPolicy = "deny"
 )
+
+// ResourceGroup defines the filter for entities
+// +kubebuilder:validation:Enum=vc-local;vc-remote
+type ResourceGroup string
+
+const (
+	// ResourceGroupVcLocal represents entities in the virtual cluster hosted locally
+	ResourceGroupVcLocal ResourceGroup = "vc-local"
+	// ResourceGroupVcRemote represents entities in the virtual cluster hosted remotely
+	ResourceGroupVcRemote ResourceGroup = "vc-remote"
+)
+
+// RuleAction defines the action for a rule
+// +kubebuilder:validation:Enum=allow;deny
+type RuleAction string
+
+const (
+	// RuleActionAllow allows traffic matching the rule
+	RuleActionAllow RuleAction = "allow"
+	// RuleActionDeny denies traffic matching the rule
+	RuleActionDeny RuleAction = "deny"
+)
+
+// PeeringSecurityRule defines a single peering security rule
+type PeeringSecurityRule struct {
+	// The group initiating the traffic
+	Src *ResourceGroup `json:"src,omitempty"`
+
+	// The group receiving the traffic
+	Dst *ResourceGroup `json:"dst,omitempty"`
+
+	// The action to take for traffic matching the rule
+	Action RuleAction `json:"action"`
+}
 
 // PeeringSecuritySpec defines the desired state of PeeringSecurity
 type PeeringSecuritySpec struct {
 	// tunnelPolicy defines the policy for the tunnel
-	// +kubebuilder:default=Allow
+	// +kubebuilder:default=allow
 	TunnelPolicy TunnelPolicy `json:"tunnelPolicy"`
+
+	// rules defines the list of peering security rules
+	Rules []PeeringSecurityRule `json:"rules,omitempty"`
 }
 
 // PeeringSecurityStatus defines the observed state of PeeringSecurity.
