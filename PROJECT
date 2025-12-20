@@ -6,6 +6,10 @@ cliVersion: 4.10.1
 domain: liqo.io
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v2-alpha:
+    manifests: dist/install.yaml
+    output: dist
 projectName: liqo-security-engine
 repo: github.com/riccardotornesello/liqo-security-manager
 version: "3"
