@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -55,26 +54,40 @@ type PeeringSecurityReconciler struct {
 func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	conf := &securityv1.PeeringSecurity{}
-	if err := r.Client.Get(ctx, req.NamespacedName, conf); err != nil {
+	// TODO: make sure the cluster exists
+
+	cfg := &securityv1.PeeringSecurity{}
+	if err := r.Client.Get(ctx, req.NamespacedName, cfg); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("missing configuration")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("unable to get the configuration %q: %w", req.NamespacedName, err)
 	}
-	logger.Info("reconciling configuration", "configuration", conf)
+	logger.Info("reconciling configuration")
+
+	clusterID, err := extractClusterID(req.Namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to extract the cluster ID from the namespace %q: %w", req.Namespace, err)
+	}
 
 	gatewayFwcfg := networkingv1beta1.FirewallConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",    // TODO
-			Namespace: "default", // TODO
+			Name:      forgeGatewayResourceName(clusterID),
+			Namespace: req.Namespace,
 		},
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, &gatewayFwcfg, func() error {
-		gatewayFwcfg.Spec.Table.Name = ptr.To("FORWARD")
-		return nil
+		gatewayFwcfg.SetLabels(forgeGatewayLabels(clusterID))
+
+		spec, err := forgeGatewaySpec(cfg)
+		if err != nil {
+			return err
+		}
+		gatewayFwcfg.Spec = *spec
+
+		return controllerutil.SetOwnerReference(cfg, &gatewayFwcfg, r.Scheme)
 	})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to reconcile the gateway firewall configuration: %w", err)
