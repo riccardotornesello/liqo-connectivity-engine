@@ -39,10 +39,15 @@ spec:
           spec:
             description: spec defines the desired state of PeeringSecurity
             properties:
-              foo:
-                description: foo is an example field of PeeringSecurity. Edit peeringsecurity_types.go
-                  to remove/update
+              tunnelPolicy:
+                default: Allow
+                description: tunnelPolicy defines the policy for the tunnel
+                enum:
+                - Allow
+                - Deny
                 type: string
+            required:
+            - tunnelPolicy
             type: object
           status:
             description: status defines the observed state of PeeringSecurity

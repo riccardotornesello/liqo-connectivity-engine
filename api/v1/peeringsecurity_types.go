@@ -23,16 +23,22 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// TunnelPolicy defines the policy for the tunnel
+// +kubebuilder:validation:Enum=Allow;Deny
+type TunnelPolicy string
+
+const (
+	// TunnelPolicyAllow allows traffic through the tunnel
+	TunnelPolicyAllow TunnelPolicy = "Allow"
+	// TunnelPolicyDeny denies traffic through the tunnel
+	TunnelPolicyDeny TunnelPolicy = "Deny"
+)
+
 // PeeringSecuritySpec defines the desired state of PeeringSecurity
 type PeeringSecuritySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of PeeringSecurity. Edit peeringsecurity_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// tunnelPolicy defines the policy for the tunnel
+	// +kubebuilder:default=Allow
+	TunnelPolicy TunnelPolicy `json:"tunnelPolicy"`
 }
 
 // PeeringSecurityStatus defines the observed state of PeeringSecurity.

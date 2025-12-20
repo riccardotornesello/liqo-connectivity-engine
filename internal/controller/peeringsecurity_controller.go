@@ -18,11 +18,17 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
 )
@@ -47,9 +53,34 @@ type PeeringSecurityReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	conf := &securityv1.PeeringSecurity{}
+	if err := r.Client.Get(ctx, req.NamespacedName, conf); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("missing configuration")
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("unable to get the configuration %q: %w", req.NamespacedName, err)
+	}
+	logger.Info("reconciling configuration", "configuration", conf)
+
+	gatewayFwcfg := networkingv1beta1.FirewallConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",    // TODO
+			Namespace: "default", // TODO
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, &gatewayFwcfg, func() error {
+		gatewayFwcfg.Spec.Table.Name = ptr.To("FORWARD")
+		return nil
+	})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to reconcile the gateway firewall configuration: %w", err)
+	}
+
+	logger.Info("gateway firewall configuration reconciled", "operation", op)
 
 	return ctrl.Result{}, nil
 }
