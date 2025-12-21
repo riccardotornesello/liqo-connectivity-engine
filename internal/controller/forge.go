@@ -48,9 +48,20 @@ func mapTunnelPolicyToChainPolicy(policy securityv1.TunnelPolicy) (networkingv1b
 	}
 }
 
-func forgeGatewaySpec(cfg *securityv1.PeeringSecurity) (*networkingv1beta1.FirewallConfigurationSpec, error) {
-	// TODO: remove duplication of code
+func mapPolicyRuleGroup(group securityv1.ResourceGroup) (string, error) {
+	switch group {
+	case securityv1.ResourceGroupVcLocal:
+		return fmt.Sprintf("@%s", gatewayVcLocalPodsSetName), nil
+	case securityv1.ResourceGroupVcRemote:
+		return fmt.Sprintf("@%s", gatewayVcRemotePodsSetName), nil
+	// TODO: securityv1.ResourceGroupRemote
+	// TODO: securityv1.ResourceGroupOffloaded
+	default:
+		return "", fmt.Errorf("unknown resource group %q", group)
+	}
+}
 
+func forgeGatewaySpec(cfg *securityv1.PeeringSecurity) (*networkingv1beta1.FirewallConfigurationSpec, error) {
 	var filterRules []networkingv1beta1firewall.FilterRule
 
 	policy, err := mapTunnelPolicyToChainPolicy(cfg.Spec.TunnelPolicy)
@@ -59,7 +70,7 @@ func forgeGatewaySpec(cfg *securityv1.PeeringSecurity) (*networkingv1beta1.Firew
 	}
 
 	for _, rule := range cfg.Spec.Rules {
-		var action networkingv1beta1firewall.Action
+		var action networkingv1beta1firewall.FilterAction
 		var match []networkingv1beta1firewall.Match
 
 		switch rule.Action {
@@ -72,15 +83,9 @@ func forgeGatewaySpec(cfg *securityv1.PeeringSecurity) (*networkingv1beta1.Firew
 		}
 
 		if rule.Src != nil {
-			var ip string
-
-			switch *rule.Src {
-			case securityv1.ResourceGroupVcLocal:
-				ip = fmt.Sprintf("@%s", gatewayVcLocalPodsSetName)
-			case securityv1.ResourceGroupVcRemote:
-				ip = fmt.Sprintf("@%s", gatewayVcRemotePodsSetName)
-			default:
-				return nil, fmt.Errorf("unknown rule src entity filter %q", *rule.Src)
+			ip, err := mapPolicyRuleGroup(*rule.Src)
+			if err != nil {
+				return nil, err
 			}
 
 			match = append(match, networkingv1beta1firewall.Match{
@@ -93,15 +98,9 @@ func forgeGatewaySpec(cfg *securityv1.PeeringSecurity) (*networkingv1beta1.Firew
 		}
 
 		if rule.Dst != nil {
-			var ip string
-
-			switch *rule.Dst {
-			case securityv1.ResourceGroupVcLocal:
-				ip = fmt.Sprintf("@%s", gatewayVcLocalPodsSetName)
-			case securityv1.ResourceGroupVcRemote:
-				ip = fmt.Sprintf("@%s", gatewayVcRemotePodsSetName)
-			default:
-				return nil, fmt.Errorf("unknown rule dst entity filter %q", *rule.Dst)
+			ip, err := mapPolicyRuleGroup(*rule.Dst)
+			if err != nil {
+				return nil, err
 			}
 
 			match = append(match, networkingv1beta1firewall.Match{

@@ -35,7 +35,7 @@ const (
 )
 
 // ResourceGroup defines the filter for entities
-// +kubebuilder:validation:Enum=vc-local;vc-remote
+// +kubebuilder:validation:Enum=vc-local;vc-remote;remote
 type ResourceGroup string
 
 const (
@@ -43,6 +43,10 @@ const (
 	ResourceGroupVcLocal ResourceGroup = "vc-local"
 	// ResourceGroupVcRemote represents entities in the virtual cluster hosted remotely
 	ResourceGroupVcRemote ResourceGroup = "vc-remote"
+	// ResourceGroupRemote represents the remote pod CIDR
+	ResourceGroupRemote ResourceGroup = "remote"
+	// ResourceGroupOffloaded represents entities offloaded on the own cluster
+	ResourceGroupOffloaded ResourceGroup = "offloaded"
 )
 
 // RuleAction defines the action for a rule
