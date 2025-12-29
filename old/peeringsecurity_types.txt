@@ -23,8 +23,66 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// // IsolationPolicy defines the policy for the tunnel
+// // +kubebuilder:validation:Enum=allow;block-tunnel;block-border
+// type IsolationPolicy string
+
+// const (
+// 	// IsolationPolicyAllow allows traffic through the tunnel
+// 	IsolationPolicyAllow IsolationPolicy = "allow"
+// 	// IsolationPolicyBlockTunnel denies traffic through the tunnel
+// 	IsolationPolicyBlockTunnel IsolationPolicy = "block-tunnel"
+// 	// IsolationPolicyBlockBorder denies traffic between customer's and own cluster
+// 	IsolationPolicyBlockBorder IsolationPolicy = "block-border"
+// )
+
+// // ResourceGroup defines the filter for entities
+// // +kubebuilder:validation:Enum=vc-local;vc-remote;remote
+// type ResourceGroup string
+
+// const (
+// 	// ResourceGroupVcLocal represents entities in the virtual cluster hosted locally
+// 	ResourceGroupVcLocal ResourceGroup = "vc-local"
+// 	// ResourceGroupVcRemote represents entities in the virtual cluster hosted remotely
+// 	ResourceGroupVcRemote ResourceGroup = "vc-remote"
+// 	// ResourceGroupRemote represents the remote pod CIDR
+// 	ResourceGroupRemote ResourceGroup = "remote"
+// 	// ResourceGroupOffloaded represents entities offloaded on the own cluster
+// 	ResourceGroupOffloaded ResourceGroup = "offloaded"
+// )
+
+// // RuleAction defines the action for a rule
+// // +kubebuilder:validation:Enum=allow;deny
+// type RuleAction string
+
+// const (
+// 	// RuleActionAllow allows traffic matching the rule
+// 	RuleActionAllow RuleAction = "allow"
+// 	// RuleActionDeny denies traffic matching the rule
+// 	RuleActionDeny RuleAction = "deny"
+// )
+
+// // PeeringSecurityRule defines a single peering security rule
+// type PeeringSecurityRule struct {
+// 	// The group initiating the traffic
+// 	Src *ResourceGroup `json:"src,omitempty"`
+
+// 	// The group receiving the traffic
+// 	Dst *ResourceGroup `json:"dst,omitempty"`
+
+// 	// The action to take for traffic matching the rule
+// 	Action RuleAction `json:"action"`
+// }
+
 // PeeringSecuritySpec defines the desired state of PeeringSecurity
 type PeeringSecuritySpec struct {
+	// // isolationPolicy defines the policy for the tunnel
+	// // +kubebuilder:default=allow
+	// IsolationPolicy IsolationPolicy `json:"isolationPolicy"`
+
+	// // rules defines the list of peering security rules
+	// Rules []PeeringSecurityRule `json:"rules,omitempty"`
+
 	// blockTunnelTraffic indicates whether to block incoming traffic through the tunnel
 	// +kubebuilder:default=false
 	BlockTunnelTraffic bool `json:"blockTunnelTraffic,omitempty"`

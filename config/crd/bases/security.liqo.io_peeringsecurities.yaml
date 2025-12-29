@@ -39,43 +39,11 @@ spec:
           spec:
             description: spec defines the desired state of PeeringSecurity
             properties:
-              rules:
-                description: rules defines the list of peering security rules
-                items:
-                  description: PeeringSecurityRule defines a single peering security
-                    rule
-                  properties:
-                    action:
-                      description: The action to take for traffic matching the rule
-                      enum:
-                      - allow
-                      - deny
-                      type: string
-                    dst:
-                      description: The group receiving the traffic
-                      enum:
-                      - vc-local
-                      - vc-remote
-                      type: string
-                    src:
-                      description: The group initiating the traffic
-                      enum:
-                      - vc-local
-                      - vc-remote
-                      type: string
-                  required:
-                  - action
-                  type: object
-                type: array
-              tunnelPolicy:
-                default: allow
-                description: tunnelPolicy defines the policy for the tunnel
-                enum:
-                - allow
-                - deny
-                type: string
-            required:
-            - tunnelPolicy
+              blockTunnelTraffic:
+                default: false
+                description: blockTunnelTraffic indicates whether to block incoming
+                  traffic through the tunnel
+                type: boolean
             type: object
           status:
             description: status defines the observed state of PeeringSecurity

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
+	"github.com/riccardotornesello/liqo-security-manager/internal/controller/utils"
 )
 
 // PeeringSecurityReconciler reconciles a PeeringSecurity object
@@ -66,22 +67,22 @@ func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	logger.Info("reconciling configuration")
 
-	clusterID, err := extractClusterID(req.Namespace)
+	clusterID, err := utils.ExtractClusterID(req.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to extract the cluster ID from the namespace %q: %w", req.Namespace, err)
 	}
 
 	gatewayFwcfg := networkingv1beta1.FirewallConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      forgeGatewayResourceName(clusterID),
+			Name:      utils.ForgeGatewayResourceName(clusterID),
 			Namespace: req.Namespace,
 		},
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, &gatewayFwcfg, func() error {
-		gatewayFwcfg.SetLabels(forgeGatewayLabels(clusterID))
+		gatewayFwcfg.SetLabels(utils.ForgeGatewayLabels(clusterID))
 
-		spec, err := forgeGatewaySpec(cfg)
+		spec, err := utils.ForgeGatewaySpec(cfg)
 		if err != nil {
 			return err
 		}
