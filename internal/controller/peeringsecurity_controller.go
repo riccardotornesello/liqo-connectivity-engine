@@ -56,6 +56,8 @@ type PeeringSecurityReconciler struct {
 func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	logger.Info("starting reconciliation")
+
 	// TODO: make sure the cluster exists
 	// TODO: handle the case of multiple PeeringSecurity in the same cluster
 	// TODO: cache sets used by both fabric and gateway
@@ -121,7 +123,7 @@ func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// 	return ctrl.Result{}, fmt.Errorf("unable to reconcile the fabric firewall configuration: %w", err)
 	// }
 
-	logger.Info("fabric firewall configuration reconciled", "gatewayOp", gatewayOp) // TODO: "fabricOp", fabricOp
+	logger.Info("reconciliation completed", "gatewayOp", gatewayOp) // TODO: "fabricOp", fabricOp
 
 	return ctrl.Result{}, nil
 }
@@ -129,6 +131,7 @@ func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager sets up the controller with the Manager.
 func (r *PeeringSecurityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// TODO: watch network changes
+	// TODO: watch pod changes
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&securityv1.PeeringSecurity{}).

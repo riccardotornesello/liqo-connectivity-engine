@@ -36,5 +36,5 @@ func GetRemoteClusterPodCIDR(ctx context.Context, cl client.Client, clusterID st
 		return "", err
 	}
 
-	return string(network.Spec.CIDR), nil
+	return string(network.Status.CIDR), nil
 }

@@ -46,8 +46,6 @@ func ForgeGatewayLabels(clusterID string) map[string]string {
 }
 
 func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *securityv1.PeeringSecurity, clusterID string) (*networkingv1beta1.FirewallConfigurationSpec, error) {
-	// TODO: Update the default policy based on BlockTunnelTraffic
-
 	spec := networkingv1beta1.FirewallConfigurationSpec{
 		Table: networkingv1beta1firewall.Table{
 			Name:   ptr.To(gatewayTableName),
@@ -56,7 +54,7 @@ func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *securityv1.Pee
 			Chains: []networkingv1beta1firewall.Chain{{
 				Name:     ptr.To(gatewayChainName),
 				Hook:     ptr.To(networkingv1beta1firewall.ChainHookPostrouting),
-				Policy:   ptr.To(networkingv1beta1firewall.ChainPolicyDrop),
+				Policy:   ptr.To(networkingv1beta1firewall.ChainPolicyAccept),
 				Priority: ptr.To[networkingv1beta1firewall.ChainPriority](gatewayChainPriority),
 				Type:     ptr.To(networkingv1beta1firewall.ChainTypeFilter),
 				Rules: networkingv1beta1firewall.RulesSet{
@@ -102,6 +100,11 @@ func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *securityv1.Pee
 		},
 	}
 
+	// Update the default policy
+	if cfg.Spec.BlockTunnelTraffic {
+		spec.Table.Chains[0].Policy = ptr.To(networkingv1beta1firewall.ChainPolicyDrop)
+	}
+
 	// Add the allowed traffic rules
 	usedResourceGroups := make(map[securityv1.ResourceGroup]struct{})
 
@@ -114,7 +117,7 @@ func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *securityv1.Pee
 			Match:  []networkingv1beta1firewall.Match{},
 		}
 
-		matchRules, err := utils.ResourceGroupFuncts[rule.Source].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionDst)
+		matchRules, err := utils.ResourceGroupFuncts[rule.Source].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionSrc)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +125,7 @@ func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *securityv1.Pee
 		usedResourceGroups[rule.Source] = struct{}{}
 
 		if rule.Destination != nil {
-			matchRules, err := utils.ResourceGroupFuncts[*rule.Destination].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionSrc)
+			matchRules, err := utils.ResourceGroupFuncts[*rule.Destination].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionDst)
 			if err != nil {
 				return nil, err
 			}
