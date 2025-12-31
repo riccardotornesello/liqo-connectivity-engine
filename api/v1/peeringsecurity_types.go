@@ -34,29 +34,21 @@ const (
 	ResourceGroupVcRemote      ResourceGroup = "vc-remote"
 )
 
-type AllowedTrafficRule struct {
+type Rule struct {
+	// allow defines whether the traffic is allowed or denied.
+	Allow bool `json:"allow"`
+
 	// source defines the source resource group of the allowed traffic.
-	Source ResourceGroup `json:"source"`
+	Source *ResourceGroup `json:"source,omitempty"`
 
 	// destination defines the destination resource group of the allowed traffic.
-	// If not specified, all the traffic coming from the source resource group is allowed.
-	// +optional
-	Destination *ResourceGroup `json:"destination"`
+	Destination *ResourceGroup `json:"destination,omitempty"`
 }
 
 // PeeringSecuritySpec defines the desired state of PeeringSecurity
 type PeeringSecuritySpec struct {
-	// blockTunnelTraffic indicates whether to block incoming traffic through the tunnel
-	// +kubebuilder:default=false
-	BlockTunnelTraffic bool `json:"blockTunnelTraffic,omitempty"`
-
-	// for providers, blockOffloadedPodsTraffic indicates whether to block traffic coming from offloaded pods
-	// +kubebuilder:default=false
-	BlockOffloadedPodsTraffic bool `json:"blockOffloadedPodsTraffic,omitempty"`
-
-	// allowedTraffic defines the list of allowed traffic rules
-	// +optional
-	AllowedTraffic []AllowedTrafficRule `json:"allowedTraffic,omitempty"`
+	// rules defines the list of allowed traffic rules
+	Rules []Rule `json:"rules,omitempty"`
 }
 
 // PeeringSecurityStatus defines the observed state of PeeringSecurity.

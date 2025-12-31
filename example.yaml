@@ -4,7 +4,9 @@ metadata:
   name: example-peeringsecurity
   namespace: liqo-tenant-rome
 spec:
-  blockTunnelTraffic: true
-  allowedTraffic:
+  rules:
     - source: remote-cluster
       destination: offloaded
+      allow: true
+    - source: remote-cluster
+      allow: false

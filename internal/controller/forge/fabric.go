@@ -9,6 +9,7 @@ import (
 	"github.com/liqotech/liqo/pkg/fabric"
 	"github.com/liqotech/liqo/pkg/firewall"
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
+	"github.com/riccardotornesello/liqo-security-manager/internal/controller/utils"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -38,19 +39,17 @@ func ForgeFabricLabels(clusterID string) map[string]string {
 	// TODO: category security?
 
 	return map[string]string{
-		firewall.FirewallCategoryTargetKey: fabric.FirewallCategoryTargetValue,
-		firewall.FirewallUniqueTargetKey:   fabric.FirewallSubCategoryTargetAllNodesValue,
+		firewall.FirewallCategoryTargetKey:    fabric.FirewallCategoryTargetValue,
+		firewall.FirewallSubCategoryTargetKey: fabric.FirewallSubCategoryTargetAllNodesValue,
 	}
 }
 
-func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.PeeringSecurity, clusterID string, clusterSubnet string) (*networkingv1beta1.FirewallConfigurationSpec, error) {
-	// TODO: optimize by creatig only the required sets
-	// TODO: check BlockOffloadedPodsTraffic implementation
-
+func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.PeeringSecurity, clusterID string) (*networkingv1beta1.FirewallConfigurationSpec, error) {
 	spec := networkingv1beta1.FirewallConfigurationSpec{
 		Table: networkingv1beta1firewall.Table{
 			Name:   ptr.To(fabricTableName),
 			Family: ptr.To(networkingv1beta1firewall.TableFamilyIPv4),
+			Sets:   make([]networkingv1beta1firewall.Set, 0),
 			Chains: []networkingv1beta1firewall.Chain{{
 				Name:     ptr.To(fabricChainName),
 				Hook:     ptr.To(networkingv1beta1firewall.ChainHookPostrouting),
@@ -60,14 +59,16 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 				Rules: networkingv1beta1firewall.RulesSet{
 					FilterRules: []networkingv1beta1firewall.FilterRule{
 						{
-							Name:   ptr.To("only-offloaded"),
+							Name:   ptr.To("allow-established-related"),
 							Action: networkingv1beta1firewall.ActionAccept,
 							Match: []networkingv1beta1firewall.Match{{
-								IP: &networkingv1beta1firewall.MatchIP{
-									Value:    clusterSubnet,
-									Position: networkingv1beta1firewall.MatchPositionSrc,
+								CtState: &networkingv1beta1firewall.MatchCtState{
+									Value: []networkingv1beta1firewall.CtStateValue{
+										networkingv1beta1firewall.CtStateEstablished,
+										networkingv1beta1firewall.CtStateRelated,
+									},
 								},
-								Op: networkingv1beta1firewall.MatchOperationNeq,
+								Op: networkingv1beta1firewall.MatchOperationEq,
 							}},
 						},
 					},
@@ -76,10 +77,54 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 		},
 	}
 
-	// Update the default policy
-	if cfg.Spec.BlockOffloadedPodsTraffic {
-		spec.Table.Chains[0].Policy = ptr.To(networkingv1beta1firewall.ChainPolicyDrop)
+	// Add the allowed traffic rules
+	usedResourceGroups := make(map[securityv1.ResourceGroup]struct{})
+
+	for i, rule := range cfg.Spec.Rules {
+		ruleName := fmt.Sprintf("allowed-traffic-%d", i)
+
+		filterRule := networkingv1beta1firewall.FilterRule{
+			Name:   ptr.To(ruleName),
+			Action: networkingv1beta1firewall.ActionAccept,
+			Match:  []networkingv1beta1firewall.Match{},
+		}
+
+		if !rule.Allow {
+			filterRule.Action = networkingv1beta1firewall.ActionDrop
+		}
+
+		if rule.Source != nil {
+			matchRules, err := utils.ResourceGroupFuncts[*rule.Source].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionSrc)
+			if err != nil {
+				return nil, err
+			}
+			filterRule.Match = append(filterRule.Match, matchRules...)
+			usedResourceGroups[*rule.Source] = struct{}{}
+		}
+
+		if rule.Destination != nil {
+			matchRules, err := utils.ResourceGroupFuncts[*rule.Destination].MakeMatchRule(ctx, cl, clusterID, networkingv1beta1firewall.MatchPositionDst)
+			if err != nil {
+				return nil, err
+			}
+			filterRule.Match = append(filterRule.Match, matchRules...)
+			usedResourceGroups[*rule.Destination] = struct{}{}
+		}
+
+		spec.Table.Chains[0].Rules.FilterRules = append(spec.Table.Chains[0].Rules.FilterRules, filterRule)
 	}
 
+	// Add the required sets
+	for rg := range usedResourceGroups {
+		if utils.ResourceGroupFuncts[rg].MakeSets != nil {
+			sets, err := utils.ResourceGroupFuncts[rg].MakeSets(ctx, cl, clusterID)
+			if err != nil {
+				return nil, err
+			}
+			spec.Table.Sets = append(spec.Table.Sets, sets...)
+		}
+	}
+
+	// Return the spec
 	return &spec, nil
 }
