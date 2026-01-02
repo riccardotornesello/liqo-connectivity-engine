@@ -21,9 +21,12 @@ import (
 	"fmt"
 
 	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -37,8 +40,23 @@ import (
 // PeeringSecurityReconciler reconciles a PeeringSecurity object
 type PeeringSecurityReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
+
+const (
+	// Condition Types
+	ConditionTypeReady = "Ready"
+
+	// Reasons
+	ReasonClusterIDError   = "ClusterIDExtractionFailed"
+	ReasonFabricSyncFailed = "FabricSyncFailed"
+	ReasonFabricSynced     = "FabricSynced"
+
+	// Event Types (Normal vs Warning is managed by k8s, here we define the reasons for events)
+	EventReasonReconcileError = "ReconcileError"
+	EventReasonSynced         = "Synced"
+)
 
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringsecurities,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringsecurities/status,verbs=get;update;patch
@@ -46,37 +64,43 @@ type PeeringSecurityReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PeeringSecurity object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	logger.Info("starting reconciliation")
-
 	// TODO: make sure the cluster exists
 	// TODO: handle the case of multiple PeeringSecurity in the same cluster
 
+	logger := log.FromContext(ctx)
+
+	// Retrieve the PeeringSecurity resource
 	cfg := &securityv1.PeeringSecurity{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cfg); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("missing configuration")
+			logger.Info("missing PeeringSecurity resource, skipping reconciliation")
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("unable to get the configuration %q: %w", req.NamespacedName, err)
+		return ctrl.Result{}, fmt.Errorf("unable to get the PeeringSecurity %q: %w", req.NamespacedName, err)
 	}
-	logger.Info("reconciling configuration")
 
+	logger.Info("reconciling PeeringSecurity")
+
+	// Extract Cluster ID from Namespace
 	clusterID, err := utils.ExtractClusterID(req.Namespace)
 	if err != nil {
+		r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to extract cluster ID: %v", err)
+
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:    ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonClusterIDError,
+			Message: fmt.Sprintf("Unable to extract cluster ID: %v", err),
+		})
+		if updateErr := r.Status().Update(ctx, cfg); updateErr != nil {
+			logger.Error(updateErr, "failed to update status")
+		}
+
 		return ctrl.Result{}, fmt.Errorf("unable to extract the cluster ID from the namespace %q: %w", req.Namespace, err)
 	}
 
-	// FABRIC
+	// Fabric Firewall Configuration Management
 	fabricFwcfg := networkingv1beta1.FirewallConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      forge.ForgeFabricResourceName(clusterID),
@@ -96,10 +120,43 @@ func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return controllerutil.SetOwnerReference(cfg, &fabricFwcfg, r.Scheme)
 	})
 	if err != nil {
+		logger.Error(err, "unable to reconcile the fabric firewall configuration")
+
+		r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to reconcile fabric: %v", err)
+
+		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+			Type:    ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonFabricSyncFailed,
+			Message: fmt.Sprintf("Failed to sync FirewallConfiguration: %v", err),
+		})
+		if updateErr := r.Status().Update(ctx, cfg); updateErr != nil {
+			logger.Error(updateErr, "failed to update status during error handling")
+		}
+
 		return ctrl.Result{}, fmt.Errorf("unable to reconcile the fabric firewall configuration: %w", err)
 	}
 
 	logger.Info("reconciliation completed", "fabricOp", fabricOp)
+
+	// Success and Final Status Update
+	cfg.Status.ObservedGeneration = cfg.Generation
+
+	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
+		Type:    ConditionTypeReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonFabricSynced,
+		Message: "FirewallConfiguration successfully synced",
+	})
+
+	if err := r.Status().Update(ctx, cfg); err != nil {
+		logger.Error(err, "failed to update PeeringSecurity status")
+		return ctrl.Result{}, err
+	}
+
+	if fabricOp != controllerutil.OperationResultNone {
+		r.Recorder.Eventf(cfg, corev1.EventTypeNormal, EventReasonSynced, "FirewallConfiguration %s successfully", fabricOp)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -108,6 +165,7 @@ func (r *PeeringSecurityReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *PeeringSecurityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// TODO: watch network changes
 	// TODO: watch pod changes
+	// TODO: firewall configuration ownership
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&securityv1.PeeringSecurity{}).

@@ -182,8 +182,9 @@ func main() {
 	}
 
 	if err := (&controller.PeeringSecurityReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("peeringsecurity-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PeeringSecurity")
 		os.Exit(1)
