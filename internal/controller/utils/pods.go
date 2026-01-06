@@ -3,9 +3,12 @@ package utils
 import (
 	"context"
 
+	offloadingv1beta1 "github.com/liqotech/liqo/apis/offloading/v1beta1"
 	"github.com/liqotech/liqo/pkg/consts"
 	"github.com/liqotech/liqo/pkg/virtualKubelet/forge"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -43,4 +46,37 @@ func GetPodsFromConsumer(ctx context.Context, cl client.Client, consumerClusterI
 	}
 
 	return podList.Items, nil
+}
+
+// Get the Pods in offloaded namespaces hosted on the consumer cluster.
+func GetPodsInOffloadedNamespaces(ctx context.Context, cl client.Client) ([]corev1.Pod, error) {
+	// Get all the namespaces offloaded.
+	namespaceList := &offloadingv1beta1.NamespaceOffloadingList{}
+	if err := cl.List(ctx, namespaceList); err != nil {
+		return nil, err
+	}
+
+	// Get all the pods in the offloaded namespaces. Exclude local shadow pods.
+	var pods []corev1.Pod
+
+	// NotEquals includes also the case where the label is not present.
+	labelsRequirement, err := labels.NewRequirement(consts.LocalPodLabelKey, selection.NotEquals, []string{consts.LocalPodLabelValue})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, nso := range namespaceList.Items {
+		podList := &corev1.PodList{}
+		if err := cl.List(
+			ctx,
+			podList,
+			client.InNamespace(nso.Namespace),
+			client.MatchingLabelsSelector{Selector: labels.NewSelector().Add(*labelsRequirement)},
+		); err != nil {
+			return nil, err
+		}
+		pods = append(pods, podList.Items...)
+	}
+
+	return pods, nil
 }

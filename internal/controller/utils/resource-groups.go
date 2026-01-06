@@ -70,6 +70,27 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 			}}, nil
 		},
 	},
+	securityv1.ResourceGroupVcLocal: {
+		MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
+			pods, err := GetPodsInOffloadedNamespaces(ctx, cl)
+			if err != nil {
+				return nil, err
+			}
+
+			setName := string(securityv1.ResourceGroupVcLocal)
+			podIpsSet := ForgePodIpsSet(setName, pods)
+			return []networkingv1beta1firewall.Set{podIpsSet}, nil
+		},
+		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+			return []networkingv1beta1firewall.Match{{
+				IP: &networkingv1beta1firewall.MatchIP{
+					Value:    fmt.Sprintf("@%s", string(securityv1.ResourceGroupVcLocal)),
+					Position: position,
+				},
+				Op: networkingv1beta1firewall.MatchOperationEq,
+			}}, nil
+		},
+	},
 	securityv1.ResourceGroupVcRemote: {
 		MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 			pods, err := GetPodsOffloadedToProvider(ctx, cl, clusterID)

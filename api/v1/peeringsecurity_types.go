@@ -24,13 +24,14 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // ResourceGroup represents a group of resources.
-// +kubebuilder:validation:Enum=local-cluster;remote-cluster;offloaded;vc-remote
+// +kubebuilder:validation:Enum=local-cluster;remote-cluster;offloaded;vc-local;vc-remote
 type ResourceGroup string
 
 const (
 	ResourceGroupLocalCluster  ResourceGroup = "local-cluster"
 	ResourceGroupRemoteCluster ResourceGroup = "remote-cluster"
 	ResourceGroupOffloaded     ResourceGroup = "offloaded"
+	ResourceGroupVcLocal       ResourceGroup = "vc-local"
 	ResourceGroupVcRemote      ResourceGroup = "vc-remote"
 )
 

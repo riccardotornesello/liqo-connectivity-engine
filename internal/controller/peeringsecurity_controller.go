@@ -22,6 +22,7 @@ import (
 
 	ipamv1alpha1 "github.com/liqotech/liqo/apis/ipam/v1alpha1"
 	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
+	offloadingv1beta1 "github.com/liqotech/liqo/apis/offloading/v1beta1"
 	"github.com/liqotech/liqo/pkg/consts"
 	vkforge "github.com/liqotech/liqo/pkg/virtualKubelet/forge"
 	corev1 "k8s.io/api/core/v1"
@@ -224,6 +225,29 @@ func (r *PeeringSecurityReconciler) networkEnqueuer(ctx context.Context, obj cli
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: clusterId, Namespace: utils.GetClusterNamespace(clusterId)}}}
 }
 
+// Enqueuer that triggers reconciliation to all PeeringSecurity resources
+func (r *PeeringSecurityReconciler) allPeeringSecurityEnqueuer(ctx context.Context, _ client.Object) []ctrl.Request {
+	logger := log.FromContext(ctx)
+
+	peeringSecurityList := &securityv1.PeeringSecurityList{}
+	if err := r.Client.List(ctx, peeringSecurityList); err != nil {
+		logger.Error(err, "unable to list PeeringSecurity resources for enqueuing all")
+		return nil
+	}
+
+	var requests []ctrl.Request
+	for _, ps := range peeringSecurityList.Items {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: ps.Namespace,
+			},
+		})
+	}
+
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PeeringSecurityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -231,6 +255,7 @@ func (r *PeeringSecurityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1beta1.FirewallConfiguration{}).
 		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podEnqueuer)).
 		Watches(&ipamv1alpha1.Network{}, handler.EnqueueRequestsFromMapFunc(r.networkEnqueuer)).
+		Watches(&offloadingv1beta1.NamespaceOffloading{}, handler.EnqueueRequestsFromMapFunc(r.allPeeringSecurityEnqueuer)).
 		Named("peeringsecurity").
 		Complete(r)
 }
