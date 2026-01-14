@@ -8,5 +8,10 @@ spec:
     - source: remote-cluster
       destination: offloaded
       allow: true
+    - source: offloaded
+      destination: remote-cluster
+      allow: true
+    - source: offloaded
+      allow: false
     - source: remote-cluster
       allow: false
