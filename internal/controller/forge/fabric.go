@@ -89,7 +89,7 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 			Match:  []networkingv1beta1firewall.Match{},
 		}
 
-		if !rule.Allow {
+		if rule.Action != securityv1.ActionAllow {
 			filterRule.Action = networkingv1beta1firewall.ActionDrop
 		}
 

@@ -17,7 +17,8 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: PeeringConnectivity is the Schema for the peeringsecurities API
+        description: PeeringConnectivity is the Schema for the peeringconnectivities
+          API
         properties:
           apiVersion:
             description: |-
@@ -42,11 +43,14 @@ spec:
               rules:
                 description: rules defines the list of allowed traffic rules
                 items:
+                  description: Rule defines a peering connectivity rule.
                   properties:
-                    allow:
-                      description: allow defines whether the traffic is allowed or
-                        denied.
-                      type: boolean
+                    action:
+                      description: action defines whether to allow or deny the traffic.
+                      enum:
+                      - allow
+                      - deny
+                      type: string
                     destination:
                       description: destination defines the destination resource group
                         of the allowed traffic.
@@ -67,8 +71,6 @@ spec:
                       - vc-local
                       - vc-remote
                       type: string
-                  required:
-                  - allow
                   type: object
                 type: array
             type: object

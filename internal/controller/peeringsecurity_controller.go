@@ -229,14 +229,14 @@ func (r *PeeringSecurityReconciler) networkEnqueuer(ctx context.Context, obj cli
 func (r *PeeringSecurityReconciler) allPeeringSecurityEnqueuer(ctx context.Context, _ client.Object) []ctrl.Request {
 	logger := log.FromContext(ctx)
 
-	peeringSecurityList := &securityv1.PeeringSecurityList{}
-	if err := r.Client.List(ctx, peeringSecurityList); err != nil {
+	peeringConnectivityList := &securityv1.PeeringConnectivityList{}
+	if err := r.Client.List(ctx, peeringConnectivityList); err != nil {
 		logger.Error(err, "unable to list PeeringConnectivity resources for enqueuing all")
 		return nil
 	}
 
 	var requests []ctrl.Request
-	for _, ps := range peeringSecurityList.Items {
+	for _, ps := range peeringConnectivityList.Items {
 		requests = append(requests, ctrl.Request{
 			NamespacedName: types.NamespacedName{
 				Name:      ps.Name,

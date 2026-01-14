@@ -35,9 +35,19 @@ const (
 	ResourceGroupVcRemote      ResourceGroup = "vc-remote"
 )
 
+// Action defines a peering connectivity rule action.
+// +kubebuilder:validation:Enum=allow;deny
+type Action string
+
+const (
+	ActionAllow Action = "allow"
+	ActionDeny  Action = "deny"
+)
+
+// Rule defines a peering connectivity rule.
 type Rule struct {
-	// allow defines whether the traffic is allowed or denied.
-	Allow bool `json:"allow"`
+	// action defines whether to allow or deny the traffic.
+	Action Action `json:"action,omitempty"`
 
 	// source defines the source resource group of the allowed traffic.
 	Source *ResourceGroup `json:"source,omitempty"`
@@ -46,14 +56,14 @@ type Rule struct {
 	Destination *ResourceGroup `json:"destination,omitempty"`
 }
 
-// PeeringSecuritySpec defines the desired state of PeeringConnectivity
-type PeeringSecuritySpec struct {
+// PeeringConnectivitySpec defines the desired state of PeeringConnectivity
+type PeeringConnectivitySpec struct {
 	// rules defines the list of allowed traffic rules
 	Rules []Rule `json:"rules,omitempty"`
 }
 
-// PeeringSecurityStatus defines the observed state of PeeringConnectivity.
-type PeeringSecurityStatus struct {
+// PeeringConnectivityStatus defines the observed state of PeeringConnectivity.
+type PeeringConnectivityStatus struct {
 	// conditions represent the current state of the PeeringConnectivity resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	// +patchMergeKey=type
@@ -69,7 +79,7 @@ type PeeringSecurityStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// PeeringConnectivity is the Schema for the peeringsecurities API
+// PeeringConnectivity is the Schema for the peeringconnectivities API
 type PeeringConnectivity struct {
 	metav1.TypeMeta `json:",inline"`
 
@@ -79,22 +89,22 @@ type PeeringConnectivity struct {
 
 	// spec defines the desired state of PeeringConnectivity
 	// +required
-	Spec PeeringSecuritySpec `json:"spec"`
+	Spec PeeringConnectivitySpec `json:"spec"`
 
 	// status defines the observed state of PeeringConnectivity
 	// +optional
-	Status PeeringSecurityStatus `json:"status,omitzero"`
+	Status PeeringConnectivityStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// PeeringSecurityList contains a list of PeeringConnectivity
-type PeeringSecurityList struct {
+// PeeringConnectivityList contains a list of PeeringConnectivity
+type PeeringConnectivityList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []PeeringConnectivity `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&PeeringConnectivity{}, &PeeringSecurityList{})
+	SchemeBuilder.Register(&PeeringConnectivity{}, &PeeringConnectivityList{})
 }

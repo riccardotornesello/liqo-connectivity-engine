@@ -7,11 +7,11 @@ spec:
   rules:
     - source: remote-cluster
       destination: offloaded
-      allow: true
+      action: "allow"
     - source: offloaded
       destination: remote-cluster
-      allow: true
+      action: "allow"
     - source: offloaded
-      allow: false
+      action: "deny"
     - source: remote-cluster
-      allow: false
+      action: "deny"

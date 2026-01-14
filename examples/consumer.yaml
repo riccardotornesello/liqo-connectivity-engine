@@ -6,6 +6,6 @@ metadata:
 spec:
   rules:
     - source: vc-remote
-      allow: true
+      action: "allow"
     - source: remote-cluster
-      allow: false
+      action: "deny"
