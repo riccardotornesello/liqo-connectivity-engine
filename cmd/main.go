@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main is the entry point for the Liqo Security Engine controller manager.
+// It initializes and starts the Kubernetes controller that manages PeeringConnectivity
+// resources and their corresponding FirewallConfiguration resources.
 package main
 
 import (
@@ -48,6 +51,8 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+// init registers all the required schemes for the controller.
+// This includes core Kubernetes types, Liqo types, and the security API types.
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(networkingv1beta1.AddToScheme(scheme))
@@ -57,7 +62,11 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-// nolint:gocyclo
+// main is the entry point of the controller manager.
+// It parses command-line flags, sets up the controller manager,
+// registers controllers, and starts the manager.
+//
+//nolint:gocyclo // Main function is allowed to be complex
 func main() {
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
@@ -67,6 +76,8 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+
+	// Define command-line flags for controller configuration.
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -90,9 +101,11 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	// Set up the logger.
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	// if the enable-http2 flag is false (the default), http/2 should be disabled
+	// Disable HTTP/2 by default to mitigate HTTP/2 vulnerabilities.
+	// If the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
 	// Rapid Reset CVEs. For more information see:
@@ -107,6 +120,7 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
+	// Configure webhook server options.
 	// Initial webhook TLS options
 	webhookTLSOpts := tlsOpts
 	webhookServerOptions := webhook.Options{
@@ -122,8 +136,10 @@ func main() {
 		webhookServerOptions.KeyName = webhookCertKey
 	}
 
+	// Create the webhook server.
 	webhookServer := webhook.NewServer(webhookServerOptions)
 
+	// Configure metrics server options.
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/metrics/server
@@ -135,6 +151,7 @@ func main() {
 	}
 
 	if secureMetrics {
+		// Configure authentication and authorization for the metrics endpoint.
 		// FilterProvider is used to protect the metrics endpoint with authn/authz.
 		// These configurations ensure that only authorized users and service accounts
 		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
@@ -142,6 +159,7 @@ func main() {
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
+	// Configure metrics server certificates (optional).
 	// If the certificate is not specified, controller-runtime will automatically
 	// generate self-signed certificates for the metrics server. While convenient for development and testing,
 	// this setup is not recommended for production.
@@ -159,6 +177,7 @@ func main() {
 		metricsServerOptions.KeyName = metricsCertKey
 	}
 
+	// Create the controller manager.
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -183,6 +202,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create and register the PeeringConnectivity controller.
 	peeringConnectivityReconciler := controller.NewPeeringConnectivityReconciler(mgr)
 	if err := (peeringConnectivityReconciler).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PeeringConnectivity")
@@ -190,6 +210,7 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	// Add health check endpoints.
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -199,6 +220,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start the controller manager.
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
