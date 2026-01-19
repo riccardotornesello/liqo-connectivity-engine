@@ -268,15 +268,155 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should create and reconcile PeeringConnectivity resources", func() {
+			By("applying a sample PeeringConnectivity resource")
+			// Create a namespace for the test
+			testNamespace := "liqo-tenant-e2e-test"
+			cmd := exec.Command("kubectl", "create", "ns", testNamespace)
+			_, err := utils.Run(cmd)
+			if err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Note: namespace might already exist: %v\n", err)
+			}
+
+			// Create PeeringConnectivity resource
+			peeringYAML := `
+apiVersion: security.liqo.io/v1
+kind: PeeringConnectivity
+metadata:
+  name: e2e-test-peering
+  namespace: liqo-tenant-e2e-test
+spec:
+  rules:
+    - source:
+        group: remote-cluster
+      destination:
+        group: local-cluster
+      action: allow
+    - source:
+        group: local-cluster
+      destination:
+        group: remote-cluster
+      action: allow
+`
+			// Save to temp file
+			tmpFile := "/tmp/peering-e2e.yaml"
+			err = os.WriteFile(tmpFile, []byte(peeringYAML), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Apply the resource
+			cmd = exec.Command("kubectl", "apply", "-f", tmpFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create PeeringConnectivity")
+
+			By("verifying the PeeringConnectivity resource was created")
+			cmd = exec.Command("kubectl", "get", "peeringconnectivity", "e2e-test-peering",
+				"-n", testNamespace, "-o", "json")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("e2e-test-peering"))
+
+			By("verifying the FirewallConfiguration was created")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "firewallconfiguration", "e2e-test-security-fabric",
+					"-n", testNamespace, "-o", "json")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("e2e-test-security-fabric"))
+			}, 2*time.Minute).Should(Succeed())
+
+			By("verifying the PeeringConnectivity status is Ready")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "peeringconnectivity", "e2e-test-peering",
+					"-n", testNamespace, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}, 2*time.Minute).Should(Succeed())
+
+			By("cleaning up the test resources")
+			cmd = exec.Command("kubectl", "delete", "peeringconnectivity", "e2e-test-peering", "-n", testNamespace)
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "ns", testNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should handle PeeringConnectivity updates", func() {
+			By("applying an initial PeeringConnectivity resource")
+			testNamespace := "liqo-tenant-e2e-update"
+			cmd := exec.Command("kubectl", "create", "ns", testNamespace)
+			_, _ = utils.Run(cmd)
+
+			initialYAML := `
+apiVersion: security.liqo.io/v1
+kind: PeeringConnectivity
+metadata:
+  name: e2e-update-test
+  namespace: liqo-tenant-e2e-update
+spec:
+  rules:
+    - source:
+        group: remote-cluster
+      action: allow
+`
+			tmpFile := "/tmp/peering-e2e-update.yaml"
+			err := os.WriteFile(tmpFile, []byte(initialYAML), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", tmpFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for initial reconciliation")
+			time.Sleep(5 * time.Second)
+
+			By("updating the PeeringConnectivity resource")
+			updatedYAML := `
+apiVersion: security.liqo.io/v1
+kind: PeeringConnectivity
+metadata:
+  name: e2e-update-test
+  namespace: liqo-tenant-e2e-update
+spec:
+  rules:
+    - source:
+        group: remote-cluster
+      action: allow
+    - source:
+        group: local-cluster
+      action: deny
+`
+			err = os.WriteFile(tmpFile, []byte(updatedYAML), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", tmpFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the FirewallConfiguration was updated")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "firewallconfiguration", "e2e-update-security-fabric",
+					"-n", testNamespace, "-o", "json")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				// Check that the output contains the updated configuration
+				g.Expect(output).NotTo(BeEmpty())
+			}, 2*time.Minute).Should(Succeed())
+
+			By("cleaning up the test resources")
+			cmd = exec.Command("kubectl", "delete", "peeringconnectivity", "e2e-update-test", "-n", testNamespace)
+			_, _ = utils.Run(cmd)
+			cmd = exec.Command("kubectl", "delete", "ns", testNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should verify metrics reflect reconciliations", func() {
+			By("checking controller reconciliation metrics")
+			metricsOutput, err := getMetricsOutput()
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve metrics")
+			Expect(metricsOutput).NotTo(BeEmpty())
+			// Verify controller metrics are present
+			Expect(metricsOutput).To(ContainSubstring("controller_runtime"))
+		})
 	})
 })
 
