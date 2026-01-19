@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controller implements the Kubernetes controller for PeeringConnectivity resources.
+//
+// This controller reconciles PeeringConnectivity custom resources and creates corresponding
+// FirewallConfiguration resources in Liqo. It watches various Kubernetes resources (Pods,
+// Networks, NamespaceOffloadings) to dynamically update firewall rules based on the current
+// state of the cluster and peering configuration.
 package controller
 
 import (
@@ -43,7 +49,9 @@ import (
 	"github.com/riccardotornesello/liqo-security-manager/internal/controller/utils"
 )
 
-// PeeringConnectivityReconciler reconciles a PeeringConnectivity object
+// PeeringConnectivityReconciler reconciles a PeeringConnectivity object.
+// It manages the lifecycle of FirewallConfiguration resources that implement
+// the security policies defined in PeeringConnectivity specs.
 type PeeringConnectivityReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
@@ -51,24 +59,31 @@ type PeeringConnectivityReconciler struct {
 }
 
 const (
-	// Condition Types
+	// ConditionTypeReady indicates whether the PeeringConnectivity resource is ready.
+	// A resource is considered ready when its FirewallConfiguration has been successfully
+	// created and synced.
 	ConditionTypeReady = "Ready"
 
-	// Reasons
-	ReasonClusterIDError   = "ClusterIDExtractionFailed"
+	// ReasonClusterIDError indicates that the cluster ID could not be extracted from the namespace.
+	ReasonClusterIDError = "ClusterIDExtractionFailed"
+	// ReasonFabricSyncFailed indicates that the FirewallConfiguration failed to sync.
 	ReasonFabricSyncFailed = "FabricSyncFailed"
-	ReasonFabricSynced     = "FabricSynced"
+	// ReasonFabricSynced indicates that the FirewallConfiguration was successfully synced.
+	ReasonFabricSynced = "FabricSynced"
 
-	// Event Types (Normal vs Warning is managed by k8s, here we define the reasons for events)
+	// EventReasonReconcileError is emitted when a reconciliation error occurs.
 	EventReasonReconcileError = "ReconcileError"
-	EventReasonSynced         = "Synced"
+	// EventReasonSynced is emitted when the FirewallConfiguration is successfully synced.
+	EventReasonSynced = "Synced"
 )
 
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities/finalizers,verbs=update
 
-// NewPeeringConnectivityReconciler creates a new PeeringConnectivityReconciler
+// NewPeeringConnectivityReconciler creates a new PeeringConnectivityReconciler.
+// It initializes the reconciler with the necessary client, scheme, and event recorder
+// from the provided controller manager.
 func NewPeeringConnectivityReconciler(mgr ctrl.Manager) *PeeringConnectivityReconciler {
 	return &PeeringConnectivityReconciler{
 		Client:   mgr.GetClient(),
@@ -77,11 +92,16 @@ func NewPeeringConnectivityReconciler(mgr ctrl.Manager) *PeeringConnectivityReco
 	}
 }
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
+// Reconcile is part of the main kubernetes reconciliation loop.
+// It moves the current state of the cluster closer to the desired state by:
+// 1. Reading the PeeringConnectivity resource
+// 2. Extracting the cluster ID from the namespace
+// 3. Creating or updating the corresponding FirewallConfiguration
+// 4. Updating the status to reflect the current state
+//
+// The function returns an error if any step fails, which will cause the request
+// to be requeued for retry.
 func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	// TODO: make sure the cluster exists
-	// TODO: handle the case of multiple PeeringConnectivity in the same cluster
 
 	logger := log.FromContext(ctx)
 
@@ -97,7 +117,8 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	logger.Info("reconciling PeeringConnectivity")
 
-	// Extract Cluster ID from Namespace
+	// Extract Cluster ID from Namespace.
+	// The namespace should follow the pattern: liqo-tenant-<cluster-id>
 	clusterID, err := utils.ExtractClusterID(req.Namespace)
 	if err != nil {
 		r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to extract cluster ID: %w", err)
@@ -115,7 +136,9 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, fmt.Errorf("unable to extract the cluster ID from the namespace %q: %w", req.Namespace, err)
 	}
 
-	// Fabric Firewall Configuration Management
+	// Create or update the Fabric FirewallConfiguration.
+	// The FirewallConfiguration is the Liqo resource that implements the actual
+	// firewall rules at the network level.
 	fabricFwcfg := networkingv1beta1.FirewallConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      forge.ForgeFabricResourceName(clusterID),
@@ -124,14 +147,19 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	fabricOp, err := controllerutil.CreateOrUpdate(ctx, r.Client, &fabricFwcfg, func() error {
+		// Set labels that identify this FirewallConfiguration as a fabric-level
+		// security configuration targeting all nodes.
 		fabricFwcfg.SetLabels(forge.ForgeFabricLabels(clusterID))
 
+		// Generate the FirewallConfiguration spec based on the PeeringConnectivity rules.
 		spec, err := forge.ForgeFabricSpec(ctx, r.Client, cfg, clusterID)
 		if err != nil {
 			return err
 		}
 		fabricFwcfg.Spec = *spec
 
+		// Set owner reference so the FirewallConfiguration is deleted when the
+		// PeeringConnectivity is deleted.
 		return controllerutil.SetOwnerReference(cfg, &fabricFwcfg, r.Scheme)
 	})
 	if err != nil {
@@ -154,7 +182,7 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	logger.Info("reconciliation completed", "fabricOp", fabricOp)
 
-	// Success and Final Status Update
+	// Update status to reflect successful reconciliation.
 	cfg.Status.ObservedGeneration = cfg.Generation
 
 	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
@@ -169,6 +197,7 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// Emit an event if the FirewallConfiguration was created or updated.
 	if fabricOp != controllerutil.OperationResultNone {
 		r.Recorder.Eventf(cfg, corev1.EventTypeNormal, EventReasonSynced, "FirewallConfiguration %s successfully", fabricOp)
 	}
@@ -176,7 +205,14 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	return ctrl.Result{}, nil
 }
 
-// podEnqueuer enqueues the PeeringConnectivity reconciliation requests for Pods.
+// podEnqueuer enqueues PeeringConnectivity reconciliation requests based on Pod changes.
+// This function is called when a Pod is created, updated, or deleted. It determines
+// which PeeringConnectivity resource(s) should be reconciled based on the Pod's labels
+// and characteristics.
+//
+// It handles two scenarios:
+// 1. Shadow pods on the consumer cluster (identified by liqo.io/local-pod label)
+// 2. Offloaded pods on the provider cluster (identified by liqo.io/origin-cluster-id label)
 func (r *PeeringConnectivityReconciler) podEnqueuer(ctx context.Context, obj client.Object) []ctrl.Request {
 	logger := log.FromContext(ctx)
 
@@ -190,7 +226,8 @@ func (r *PeeringConnectivityReconciler) podEnqueuer(ctx context.Context, obj cli
 
 	localPodLabel, exists := labels[consts.LocalPodLabelKey]
 	if exists && localPodLabel == consts.LocalPodLabelValue {
-		// The Pod is a shadow Pod on the consumer cluster
+		// The Pod is a shadow Pod on the consumer cluster.
+		// Enqueue the PeeringConnectivity for the provider cluster (node name).
 		nodeName := pod.Spec.NodeName
 		if nodeName == "" {
 			return nil
@@ -202,7 +239,8 @@ func (r *PeeringConnectivityReconciler) podEnqueuer(ctx context.Context, obj cli
 
 	originClusterLabel, exists := labels[vkforge.LiqoOriginClusterIDKey]
 	if exists {
-		// The Pod is offloaded to the provider cluster
+		// The Pod is offloaded to the provider cluster.
+		// Enqueue the PeeringConnectivity for the consumer cluster (origin cluster).
 		logger.Info("Enqueuing Configuration for Pod from Consumer", "pod", pod.Name, "originCluster", originClusterLabel)
 		return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: originClusterLabel, Namespace: utils.GetClusterNamespace(originClusterLabel)}}}
 	}
@@ -210,6 +248,9 @@ func (r *PeeringConnectivityReconciler) podEnqueuer(ctx context.Context, obj cli
 	return nil
 }
 
+// networkEnqueuer enqueues PeeringConnectivity reconciliation requests based on Network changes.
+// This function is called when a Liqo Network resource is created, updated, or deleted.
+// Network resources contain CIDR information that is used in firewall rules.
 func (r *PeeringConnectivityReconciler) networkEnqueuer(ctx context.Context, obj client.Object) []ctrl.Request {
 	logger := log.FromContext(ctx)
 
@@ -221,10 +262,11 @@ func (r *PeeringConnectivityReconciler) networkEnqueuer(ctx context.Context, obj
 
 	namespace := obj.GetNamespace()
 	if namespace == "liqo" {
-		// Ignore Liqo system namespace
+		// Ignore Network resources in the Liqo system namespace.
 		return nil
 	}
 
+	// Extract the cluster ID from the namespace and enqueue the corresponding PeeringConnectivity.
 	clusterId, err := utils.ExtractClusterID(namespace)
 	if err != nil {
 		logger.Error(err, "unable to extract cluster ID from Network namespace", "namespace", namespace)
@@ -234,7 +276,10 @@ func (r *PeeringConnectivityReconciler) networkEnqueuer(ctx context.Context, obj
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: clusterId, Namespace: utils.GetClusterNamespace(clusterId)}}}
 }
 
-// Enqueuer that triggers reconciliation to all PeeringConnectivity resources
+// allPeeringConnectivityEnqueuer enqueues reconciliation for all PeeringConnectivity resources.
+// This function is called when a NamespaceOffloading resource changes, which may affect
+// multiple PeeringConnectivity resources. It lists all PeeringConnectivity resources and
+// enqueues them for reconciliation.
 func (r *PeeringConnectivityReconciler) allPeeringConnectivityEnqueuer(ctx context.Context, _ client.Object) []ctrl.Request {
 	logger := log.FromContext(ctx)
 
@@ -258,6 +303,10 @@ func (r *PeeringConnectivityReconciler) allPeeringConnectivityEnqueuer(ctx conte
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// It configures the controller to:
+// - Reconcile PeeringConnectivity resources
+// - Own FirewallConfiguration resources (so they're deleted when the PC is deleted)
+// - Watch Pods, Networks, and NamespaceOffloadings to trigger reconciliation when they change
 func (r *PeeringConnectivityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&securityv1.PeeringConnectivity{}).
