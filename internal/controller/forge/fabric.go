@@ -154,6 +154,10 @@ func ForgeMatchRule(party *securityv1.Party, position networkingv1beta1firewall.
 
 	if party.Group != nil {
 		// Generate match rules for the specified resource group.
+		// Note: We use context.TODO() and pass nil/empty string here because the match rule
+		// generation for most resource groups doesn't require the context or cluster ID
+		// at this stage. The actual context and cluster ID are used when creating sets.
+		// This is a known limitation tracked in TODOS.md.
 		matchRules, err = utils.ResourceGroupFuncts[*party.Group].MakeMatchRule(context.TODO(), nil, "", position)
 		if err != nil {
 			return nil, err

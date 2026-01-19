@@ -10,6 +10,12 @@ import (
 // ForgePodIpsSet creates a firewall Set containing the IP addresses of the given pods.
 // This set can be referenced in firewall rules to match traffic to/from these pods.
 // Pods without an IP address are excluded from the set.
+//
+// Parameters:
+//   - setName: The name to assign to the firewall set (used for referencing in rules)
+//   - pods: The list of pods whose IPs should be included in the set
+//
+// Returns a networkingv1beta1firewall.Set containing the pod IPs.
 func ForgePodIpsSet(setName string, pods []corev1.Pod) networkingv1beta1firewall.Set {
 	setElements := make([]networkingv1beta1firewall.SetElement, 0)
 	for _, pod := range pods {

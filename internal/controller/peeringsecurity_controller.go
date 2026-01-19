@@ -99,8 +99,11 @@ func NewPeeringConnectivityReconciler(mgr ctrl.Manager) *PeeringConnectivityReco
 // 3. Creating or updating the corresponding FirewallConfiguration
 // 4. Updating the status to reflect the current state
 //
-// The function returns an error if any step fails, which will cause the request
-// to be requeued for retry.
+// Return values:
+//   - (ctrl.Result{}, nil): Reconciliation succeeded, no requeue needed
+//   - (ctrl.Result{}, err): Reconciliation failed, will be requeued automatically
+//   - (ctrl.Result{Requeue: true}, nil): Reconciliation succeeded, but requeue immediately
+//   - (ctrl.Result{RequeueAfter: duration}, nil): Reconciliation succeeded, requeue after duration
 func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	logger := log.FromContext(ctx)

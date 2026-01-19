@@ -65,7 +65,8 @@ func init() {
 // main is the entry point of the controller manager.
 // It parses command-line flags, sets up the controller manager,
 // registers controllers, and starts the manager.
-// nolint:gocyclo // Main function is allowed to be complex
+//
+//nolint:gocyclo // Main function is allowed to be complex
 func main() {
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string

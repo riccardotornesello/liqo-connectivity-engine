@@ -22,7 +22,7 @@ import (
 // Shadow pods are identified by the liqo.io/local-pod label and are scheduled
 // on a virtual node representing the provider cluster.
 func GetPodsOffloadedToProvider(ctx context.Context, cl client.Client, providerClusterID string) ([]corev1.Pod, error) {
-	// TODO: optimize by adding labels in liqo when offloading pods
+	// TODO: optimize by adding labels in liqo when offloading pods (see TODOS.md)
 
 	// Get all the pods offloaded to the provider cluster.
 	podList := &corev1.PodList{}

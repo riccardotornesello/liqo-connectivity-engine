@@ -15,6 +15,7 @@
 apiVersion: security.liqo.io/v1
 kind: PeeringConnectivity
 metadata:
+  # Replace 'selective-consumer' with your actual cluster ID
   name: selective-consumer
   namespace: liqo-tenant-selective-consumer
 spec:
