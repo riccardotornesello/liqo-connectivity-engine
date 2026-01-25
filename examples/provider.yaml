@@ -45,7 +45,16 @@ spec:
         group: remote-cluster
       action: "allow"
 
-    # Rule 3: Deny all other traffic from offloaded pods
+    # Rule 3: Allow traffic from offloaded pods to other offloaded pods
+    # This allows communication between offloaded workloads within the provider cluster.
+    # Example: Offloaded microservices can interact with each other as needed.
+    - source:
+        group: offloaded
+      destination:
+        group: offloaded
+      action: "allow"
+
+    # Rule 4: Deny all other traffic from offloaded pods
     # This prevents offloaded workloads from accessing provider cluster resources
     # or communicating with other offloaded workloads (lateral movement).
     # This is a critical security control for multi-tenant environments.
@@ -53,7 +62,7 @@ spec:
         group: offloaded
       action: "deny"
 
-    # Rule 4: Deny all other traffic from remote cluster
+    # Rule 5: Deny all other traffic from remote cluster
     # This prevents the consumer cluster from accessing provider cluster resources
     # beyond the offloaded workloads. Provides isolation between clusters.
     - source:
