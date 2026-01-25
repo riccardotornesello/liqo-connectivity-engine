@@ -24,7 +24,7 @@ import (
 // It categorizes different types of pods and network entities to enable fine-grained
 // network security policy management across cluster boundaries.
 //
-// +kubebuilder:validation:Enum=local-cluster;remote-cluster;offloaded;vc-local;vc-remote
+// +kubebuilder:validation:Enum=local-cluster;remote-cluster;offloaded;vc-local;vc-remote;private-subnets
 type ResourceGroup string
 
 const (
@@ -44,6 +44,9 @@ const (
 	// that represent pods offloaded to a provider cluster .
 	// For consumer only!
 	ResourceGroupVcRemote ResourceGroup = "vc-remote"
+	// PrivateSubnets represents ALL private subnet ranges defined by RFC1918.
+	// This group is used to match traffic destined to private IP ranges.
+	ResourceGroupPrivateSubnets ResourceGroup = "private-subnets"
 )
 
 // Action defines the action to take when a firewall rule matches network traffic.

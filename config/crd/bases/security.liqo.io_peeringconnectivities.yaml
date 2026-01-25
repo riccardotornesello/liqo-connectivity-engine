@@ -79,6 +79,7 @@ spec:
                           - offloaded
                           - vc-local
                           - vc-remote
+                          - private-subnets
                           type: string
                       type: object
                     source:
@@ -96,6 +97,7 @@ spec:
                           - offloaded
                           - vc-local
                           - vc-remote
+                          - private-subnets
                           type: string
                       type: object
                   type: object

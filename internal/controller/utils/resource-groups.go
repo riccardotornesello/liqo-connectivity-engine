@@ -4,7 +4,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 
 	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
@@ -29,7 +28,6 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 	// local-cluster: Matches pods in the local cluster's pod CIDR.
 	// This doesn't need a set because it uses a simple CIDR match.
 	securityv1.ResourceGroupLocalCluster: {
-		MakeSets: nil,
 		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 			// Get the local cluster's pod CIDR and create a match rule for it.
 			cidr, err := GetCurrentClusterPodCIDR(ctx, cl)
@@ -49,7 +47,6 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 	// remote-cluster: Matches pods in the remote cluster's pod CIDR.
 	// This doesn't need a set because it uses a simple CIDR match.
 	securityv1.ResourceGroupRemoteCluster: {
-		MakeSets: nil,
 		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 			// Get the remote cluster's pod CIDR and create a match rule for it.
 			cidr, err := GetRemoteClusterPodCIDR(ctx, cl, clusterID)
@@ -78,14 +75,13 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 			}
 
 			// Create a firewall set containing the IPs of these pods.
-			setName := string(securityv1.ResourceGroupOffloaded)
-			podIpsSet := ForgePodIpsSet(setName, pods)
+			podIpsSet := ForgePodIpsSet("offloaded", pods)
 			return []networkingv1beta1firewall.Set{podIpsSet}, nil
 		},
 		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 			return []networkingv1beta1firewall.Match{{
 				IP: &networkingv1beta1firewall.MatchIP{
-					Value:    fmt.Sprintf("@%s", string(securityv1.ResourceGroupOffloaded)),
+					Value:    "@offloaded",
 					Position: position,
 				},
 				Op: networkingv1beta1firewall.MatchOperationEq,
@@ -104,14 +100,13 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 			}
 
 			// Create a firewall set containing the IPs of these pods.
-			setName := string(securityv1.ResourceGroupVcLocal)
-			podIpsSet := ForgePodIpsSet(setName, pods)
+			podIpsSet := ForgePodIpsSet("vclocal", pods)
 			return []networkingv1beta1firewall.Set{podIpsSet}, nil
 		},
 		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 			return []networkingv1beta1firewall.Match{{
 				IP: &networkingv1beta1firewall.MatchIP{
-					Value:    fmt.Sprintf("@%s", string(securityv1.ResourceGroupVcLocal)),
+					Value:    "@vclocal",
 					Position: position,
 				},
 				Op: networkingv1beta1firewall.MatchOperationEq,
@@ -130,14 +125,37 @@ var ResourceGroupFuncts = map[securityv1.ResourceGroup]groupFuncts{
 			}
 
 			// Create a firewall set containing the IPs of these shadow pods.
-			setName := string(securityv1.ResourceGroupVcRemote)
-			podIpsSet := ForgePodIpsSet(setName, pods)
+			podIpsSet := ForgePodIpsSet("vcremote", pods)
 			return []networkingv1beta1firewall.Set{podIpsSet}, nil
 		},
 		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 			return []networkingv1beta1firewall.Match{{
 				IP: &networkingv1beta1firewall.MatchIP{
-					Value:    fmt.Sprintf("@%s", string(securityv1.ResourceGroupVcRemote)),
+					Value:    "@vcremote",
+					Position: position,
+				},
+				Op: networkingv1beta1firewall.MatchOperationEq,
+			}}, nil
+		},
+	},
+	// private-subnets: Matches traffic destined to all private subnet ranges defined by RFC1918.
+	// This doesn't need a set because it uses simple CIDR matches.
+	securityv1.ResourceGroupPrivateSubnets: {
+		MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
+			return []networkingv1beta1firewall.Set{{
+				Name:    "privatesubnets",
+				KeyType: networkingv1beta1firewall.SetDataTypeIPAddr,
+				Elements: []networkingv1beta1firewall.SetElement{
+					{Key: "10.0.0.0/8"},
+					{Key: "172.16.0.0/12"},
+					{Key: "192.168.0.0/16"},
+				},
+			}}, nil
+		},
+		MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+			return []networkingv1beta1firewall.Match{{
+				IP: &networkingv1beta1firewall.MatchIP{
+					Value:    "@privatesubnets",
 					Position: position,
 				},
 				Op: networkingv1beta1firewall.MatchOperationEq,
