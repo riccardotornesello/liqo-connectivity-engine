@@ -39,10 +39,10 @@ var _ = Describe("Scheme Utilities", func() {
 			Expect(scheme.IsGroupRegistered(networkingv1beta1.GroupVersion.Group)).To(BeTrue())
 
 			// Verify that Liqo IPAM types are registered
-			Expect(scheme.IsGroupRegistered(ipamv1alpha1.GroupVersion.Group)).To(BeTrue())
+			Expect(scheme.IsGroupRegistered(ipamv1alpha1.SchemeGroupVersion.Group)).To(BeTrue())
 
 			// Verify that Liqo offloading types are registered
-			Expect(scheme.IsGroupRegistered(offloadingv1beta1.GroupVersion.Group)).To(BeTrue())
+			Expect(scheme.IsGroupRegistered(offloadingv1beta1.SchemeGroupVersion.Group)).To(BeTrue())
 
 			// Verify that security types are registered
 			Expect(scheme.IsGroupRegistered(securityv1.GroupVersion.Group)).To(BeTrue())
