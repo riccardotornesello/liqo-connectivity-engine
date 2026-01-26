@@ -51,22 +51,24 @@ type PeeringConnectivityReconciler struct {
 }
 
 const (
-	// ConditionTypeReady indicates whether the PeeringConnectivity resource is ready.
-	// A resource is considered ready when its FirewallConfiguration has been successfully
-	// created and synced.
-	ConditionTypeReady = "Ready"
-
-	// ReasonClusterIDError indicates that the cluster ID could not be extracted from the namespace.
-	ReasonClusterIDError = "ClusterIDExtractionFailed"
-	// ReasonFabricSyncFailed indicates that the FirewallConfiguration failed to sync.
-	ReasonFabricSyncFailed = "FabricSyncFailed"
-	// ReasonFabricSynced indicates that the FirewallConfiguration was successfully synced.
-	ReasonFabricSynced = "FabricSynced"
+	// ConditionReasonClusterIDError indicates that the cluster ID could not be extracted from the namespace.
+	ConditionReasonClusterIDError = "ClusterIDExtractionFailed"
+	// ConditionReasonFabricSyncFailed indicates that the FirewallConfiguration failed to sync.
+	ConditionReasonFabricSyncFailed = "FabricSyncFailed"
+	// ConditionReasonFabricSynced indicates that the FirewallConfiguration was successfully synced.
+	ConditionReasonFabricSynced = "FabricSynced"
+	// ConditionReasonDeletionFailed indicates that resource deletion failed during finalization.
+	ConditionReasonDeletionFailed = "DeletionFailed"
 
 	// EventReasonReconcileError is emitted when a reconciliation error occurs.
 	EventReasonReconcileError = "ReconcileError"
+	// EventReasonDeletionError is emitted when a deletion error occurs.
+	EventReasonDeletionError = "DeletionError"
 	// EventReasonSynced is emitted when the FirewallConfiguration is successfully synced.
 	EventReasonSynced = "Synced"
+
+	// FinalizerName is the name of the finalizer added to PeeringConnectivity resources.
+	FinalizerName = "peeringsecurity-controller.security.liqo.io/finalizer"
 )
 
 // +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities,verbs=get;list;watch;create;update;patch;delete
@@ -85,11 +87,7 @@ func NewPeeringConnectivityReconciler(mgr ctrl.Manager) *PeeringConnectivityReco
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop.
-// It moves the current state of the cluster closer to the desired state by:
-// 1. Reading the PeeringConnectivity resource
-// 2. Extracting the cluster ID from the namespace
-// 3. Creating or updating the corresponding FirewallConfiguration
-// 4. Updating the status to reflect the current state
+// It moves the current state of the cluster closer to the desired state.
 //
 // Return values:
 //   - (ctrl.Result{}, nil): Reconciliation succeeded, no requeue needed
@@ -97,25 +95,28 @@ func NewPeeringConnectivityReconciler(mgr ctrl.Manager) *PeeringConnectivityReco
 func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Retrieve the PeeringConnectivity resource
+	// FETCH: retrieve the PeeringConnectivity resource.
 	cfg := &securityv1.PeeringConnectivity{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cfg); err != nil {
 		if errors.IsNotFound(err) {
+			// The PeeringConnectivity resource was not found. It may have been deleted after
+			// the reconcile request was queued. In this case, there is nothing to do.
 			logger.Info("missing PeeringConnectivity resource, skipping reconciliation")
 			return ctrl.Result{}, nil
 		}
+
 		return ctrl.Result{}, fmt.Errorf("unable to get the PeeringConnectivity %q: %w", req.NamespacedName, err)
 	}
 
-	logger.Info("reconciling PeeringConnectivity")
+	logger.Info("starting PeeringConnectivity reconciliation")
 
-	// Finalizer handling
-	// Examine DeletionTimestamp to determine if object is under deletion
+	// FINALIZE: handle deletion and finalizers.
+	// Examine DeletionTimestamp to determine if object is under deletion.
 	if cfg.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is not being deleted, so if it does not have our finalizer,
-		// then let's add the finalizer and update the object. This is equivalent
-		// to registering our finalizer.
+		// then let's add the finalizer and update the object
 		if !controllerutil.ContainsFinalizer(cfg, FinalizerName) {
+			logger.Info("adding finalizer for the PeeringConnectivity")
 			controllerutil.AddFinalizer(cfg, FinalizerName)
 			if err := r.Update(ctx, cfg); err != nil {
 				return ctrl.Result{}, err
@@ -124,99 +125,81 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	} else {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(cfg, FinalizerName) {
-			// Our finalizer is present, so let's remove the associated resources.
-			clusterID, err := utils.ExtractClusterID(req.Namespace)
-			if err == nil {
-				fabricFwcfg := networkingv1beta1.FirewallConfiguration{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fabric.ForgeFabricResourceName(clusterID),
-						Namespace: req.Namespace,
-					},
-				}
-				if err := r.Delete(ctx, &fabricFwcfg); err != nil && !errors.IsNotFound(err) {
-					logger.Error(err, "unable to delete the fabric firewall configuration during finalization")
-
-					r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to delete fabric during finalization: %v", err)
-
-					return ctrl.Result{}, fmt.Errorf("unable to delete the fabric firewall configuration %q during finalization: %w",
-						types.NamespacedName{Name: fabricFwcfg.Name, Namespace: fabricFwcfg.Namespace}, err)
-				}
-
-				logger.Info("successfully finalized PeeringConnectivity and deleted associated resources")
-			}
-
-			// Remove our finalizer from the list and update it.
-			controllerutil.RemoveFinalizer(cfg, FinalizerName)
-			if err := r.Update(ctx, cfg); err != nil {
+			// Our finalizer is present, so let's remove the associated resources
+			clusterID, err := utils.ExtractClusterIDFromNamespace(req.Namespace)
+			if err != nil {
+				// Something went wrong extracting the cluster ID, log and return the error to retry
+				logger.Error(err, "unable to extract cluster ID during finalization")
+				r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonDeletionError, "Failed to extract cluster ID: %v", err)
 				return ctrl.Result{}, err
 			}
+
+			// Delete the associated resources
+			if err = fabric.EnsureFabricFirewallConfigurationDeleted(ctx, r.Client, clusterID); err != nil {
+				return ctrl.Result{}, utils.HandleReconcileError(
+					ctx,
+					r.Client,
+					logger,
+					r.Recorder,
+					cfg,
+					err,
+					"error during FirewallConfiguration deletion",
+					EventReasonDeletionError,
+					ConditionReasonDeletionFailed,
+				)
+			}
+			logger.Info("successfully deleted associated resources during finalization")
+
+			// Remove the finalizer to allow deletion to proceed
+			controllerutil.RemoveFinalizer(cfg, FinalizerName)
+			if err := r.Update(ctx, cfg); err != nil {
+				logger.Error(err, "error removing finalizer")
+				return ctrl.Result{}, err
+			}
+			logger.Info("successfully removed finalizer from the PeeringConnectivity")
+
+			return ctrl.Result{}, nil
 		}
 
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
 	}
 
+	// ANALYZE: fetch necessary data.
 	// Extract Cluster ID from Namespace.
-	// The namespace should follow the pattern: liqo-tenant-<cluster-id>
-	clusterID, err := utils.ExtractClusterID(req.Namespace)
+	// The namespace should follow the pattern: liqo-tenant-<cluster-id>.
+	clusterID, err := utils.ExtractClusterIDFromNamespace(req.Namespace)
 	if err != nil {
-		r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to extract cluster ID: %v", err)
-
-		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
-			Type:    ConditionTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonClusterIDError,
-			Message: fmt.Sprintf("Unable to extract cluster ID: %v", err),
-		})
-		if updateErr := r.Status().Update(ctx, cfg); updateErr != nil {
-			logger.Error(updateErr, "failed to update status")
-		}
-
-		return ctrl.Result{}, fmt.Errorf("unable to extract the cluster ID from the namespace %q: %w", req.Namespace, err)
+		return ctrl.Result{}, utils.HandleReconcileError(
+			ctx,
+			r.Client,
+			logger,
+			r.Recorder,
+			cfg,
+			err,
+			"unable to extract cluster ID from namespace",
+			EventReasonReconcileError,
+			ConditionReasonClusterIDError,
+		)
 	}
 
+	// ACT: reconcile resources.
 	// Create or update the Fabric FirewallConfiguration.
 	// The FirewallConfiguration is the Liqo resource that implements the actual
 	// firewall rules at the network level.
-	fabricFwcfg := networkingv1beta1.FirewallConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fabric.ForgeFabricResourceName(clusterID),
-			Namespace: req.Namespace,
-		},
-	}
-
-	fabricOp, err := controllerutil.CreateOrUpdate(ctx, r.Client, &fabricFwcfg, func() error {
-		// Set labels that identify this FirewallConfiguration as a fabric-level
-		// security configuration targeting all nodes.
-		fabricFwcfg.SetLabels(fabric.ForgeFabricLabels(clusterID))
-
-		// Generate the FirewallConfiguration spec based on the PeeringConnectivity rules.
-		spec, err := fabric.ForgeFabricSpec(ctx, r.Client, cfg, clusterID)
-		if err != nil {
-			return err
-		}
-		fabricFwcfg.Spec = *spec
-
-		// Set owner reference so the FirewallConfiguration is deleted when the
-		// PeeringConnectivity is deleted.
-		return controllerutil.SetOwnerReference(cfg, &fabricFwcfg, r.Scheme)
-	})
+	fabricOp, err := fabric.ReconcileFabricFirewallConfiguration(ctx, r.Client, r.Scheme, cfg, clusterID)
 	if err != nil {
-		logger.Error(err, "unable to reconcile the fabric firewall configuration")
-
-		r.Recorder.Eventf(cfg, corev1.EventTypeWarning, EventReasonReconcileError, "Failed to reconcile fabric: %v", err)
-
-		meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
-			Type:    ConditionTypeReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonFabricSyncFailed,
-			Message: fmt.Sprintf("Failed to sync FirewallConfiguration: %v", err),
-		})
-		if updateErr := r.Status().Update(ctx, cfg); updateErr != nil {
-			logger.Error(updateErr, "failed to update status during error handling")
-		}
-
-		return ctrl.Result{}, fmt.Errorf("unable to reconcile the fabric firewall configuration: %w", err)
+		return ctrl.Result{}, utils.HandleReconcileError(
+			ctx,
+			r.Client,
+			logger,
+			r.Recorder,
+			cfg,
+			err,
+			"unable to reconcile fabric firewall configuration",
+			EventReasonReconcileError,
+			ConditionReasonFabricSyncFailed,
+		)
 	}
 
 	logger.Info("reconciliation completed", "fabricOp", fabricOp)
@@ -225,14 +208,14 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	cfg.Status.ObservedGeneration = cfg.Generation
 
 	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
-		Type:    ConditionTypeReady,
+		Type:    utils.ConditionTypeReady,
 		Status:  metav1.ConditionTrue,
-		Reason:  ReasonFabricSynced,
+		Reason:  ConditionReasonFabricSynced,
 		Message: "FirewallConfiguration successfully synced",
 	})
 
 	if err := r.Status().Update(ctx, cfg); err != nil {
-		logger.Error(err, "failed to update PeeringConnectivity status")
+		logger.Error(err, "failed to update status")
 		return ctrl.Result{}, err
 	}
 
@@ -306,7 +289,7 @@ func (r *PeeringConnectivityReconciler) networkEnqueuer(ctx context.Context, obj
 	}
 
 	// Extract the cluster ID from the namespace and enqueue the corresponding PeeringConnectivity.
-	clusterId, err := utils.ExtractClusterID(namespace)
+	clusterId, err := utils.ExtractClusterIDFromNamespace(namespace)
 	if err != nil {
 		logger.Error(err, "unable to extract cluster ID from Network namespace", "namespace", namespace)
 		return nil

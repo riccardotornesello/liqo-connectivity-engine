@@ -54,9 +54,6 @@ func ForgeFabricResourceName(clusterID string) string {
 // These labels identify the configuration as a fabric-level security configuration
 // that targets all nodes in the cluster.
 func ForgeFabricLabels(clusterID string) map[string]string {
-	// TODO: label liqo-managed?
-	// TODO: create new category?
-
 	// Labels identify this as a fabric-level firewall configuration targeting all nodes.
 	return map[string]string{
 		firewall.FirewallCategoryTargetKey:    fabric.FirewallCategoryTargetValue,

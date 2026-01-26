@@ -26,6 +26,7 @@ const (
 	// localPodCIDRNetworkName is the name of the Network resource that contains
 	// the local cluster's pod CIDR information.
 	localPodCIDRNetworkName = "pod-cidr"
+
 	// localPodCIDRNetworkNamespace is the namespace where the local pod CIDR Network resource is stored.
 	localPodCIDRNetworkNamespace = "liqo"
 )

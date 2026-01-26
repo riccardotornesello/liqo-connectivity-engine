@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
+	"github.com/riccardotornesello/liqo-security-manager/internal/controller/utils"
 )
 
 var _ = Describe("PeeringConnectivity Controller", func() {
@@ -193,7 +194,7 @@ var _ = Describe("PeeringConnectivity Controller", func() {
 					return metav1.ConditionUnknown
 				}
 				for _, cond := range resource.Status.Conditions {
-					if cond.Type == ConditionTypeReady {
+					if cond.Type == utils.ConditionTypeReady {
 						return cond.Status
 					}
 				}
@@ -298,8 +299,8 @@ var _ = Describe("PeeringConnectivity Controller", func() {
 					return false
 				}
 				for _, cond := range resource.Status.Conditions {
-					if cond.Type == ConditionTypeReady && cond.Status == metav1.ConditionFalse {
-						return cond.Reason == ReasonClusterIDError
+					if cond.Type == utils.ConditionTypeReady && cond.Status == metav1.ConditionFalse {
+						return cond.Reason == ConditionReasonClusterIDError
 					}
 				}
 				return false
