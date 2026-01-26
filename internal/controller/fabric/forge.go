@@ -1,7 +1,7 @@
-// Package forge provides functions for creating Liqo FirewallConfiguration resources.
+// Package fabric provides functions for creating Liqo FirewallConfiguration resources.
 // It translates PeeringConnectivity security rules into low-level firewall configurations
 // that can be applied to the Liqo fabric network.
-package forge
+package fabric
 
 import (
 	"context"
@@ -98,6 +98,7 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 
 	// Add the allowed traffic rules
 	usedResourceGroups := make(map[securityv1.ResourceGroup]struct{})
+	usedNamespaces := make(map[string]struct{})
 
 	for i, rule := range cfg.Spec.Rules {
 		ruleName := fmt.Sprintf("allowed-traffic-%d", i)
@@ -114,14 +115,14 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 		}
 
 		// Add match rules for the source (if specified).
-		sourceRules, err := ForgeMatchRule(ctx, cl, rule.Source, clusterID, networkingv1beta1firewall.MatchPositionSrc, usedResourceGroups)
+		sourceRules, err := ForgeMatchRule(ctx, cl, rule.Source, clusterID, networkingv1beta1firewall.MatchPositionSrc, usedResourceGroups, usedNamespaces)
 		if err != nil {
 			return nil, err
 		}
 		filterRule.Match = append(filterRule.Match, sourceRules...)
 
 		// Add match rules for the destination (if specified).
-		destRules, err := ForgeMatchRule(ctx, cl, rule.Destination, clusterID, networkingv1beta1firewall.MatchPositionDst, usedResourceGroups)
+		destRules, err := ForgeMatchRule(ctx, cl, rule.Destination, clusterID, networkingv1beta1firewall.MatchPositionDst, usedResourceGroups, usedNamespaces)
 		if err != nil {
 			return nil, err
 		}
@@ -143,6 +144,18 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 		}
 	}
 
+	// Create namespace sets if needed
+	for ns := range usedNamespaces {
+		// Create a set for each namespace
+		pods, err := utils.GetPodsInNamespace(ctx, cl, ns)
+		if err != nil {
+			return nil, err
+		}
+
+		set := utils.ForgePodIpsSet(fmt.Sprintf("ns-%s", ns), pods)
+		spec.Table.Sets = append(spec.Table.Sets, set)
+	}
+
 	test, _ := json.Marshal(spec)
 	fmt.Printf("Fabric Spec: %s\n", test)
 
@@ -153,7 +166,15 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *securityv1.Peer
 // ForgeMatchRule creates firewall match rules for a party (source or destination).
 // It translates a high-level Party specification into low-level nftables match rules
 // and tracks which resource groups are used so their sets can be created.
-func ForgeMatchRule(ctx context.Context, cl client.Client, party *securityv1.Party, clusterID string, position networkingv1beta1firewall.MatchPosition, usedResourceGroups map[securityv1.ResourceGroup]struct{}) (matchRules []networkingv1beta1firewall.Match, err error) {
+func ForgeMatchRule(
+	ctx context.Context,
+	cl client.Client,
+	party *securityv1.Party,
+	clusterID string,
+	position networkingv1beta1firewall.MatchPosition,
+	usedResourceGroups map[securityv1.ResourceGroup]struct{},
+	usedNamespaces map[string]struct{},
+) (matchRules []networkingv1beta1firewall.Match, err error) {
 	if party == nil {
 		// No party specified, so no match rules needed (matches all).
 		return nil, nil
@@ -167,6 +188,20 @@ func ForgeMatchRule(ctx context.Context, cl client.Client, party *securityv1.Par
 		}
 		// Mark this resource group as used so its set will be created.
 		usedResourceGroups[*party.Group] = struct{}{}
+	} else if party.Namespace != nil {
+		// Mark this namespace as used so its set can be created.
+		usedNamespaces[*party.Namespace] = struct{}{}
+
+		// Generate match rules for the specified namespace.
+		matchRules = []networkingv1beta1firewall.Match{{
+			IP: &networkingv1beta1firewall.MatchIP{
+				Value:    fmt.Sprintf("@ns-%s", *party.Namespace),
+				Position: position,
+			},
+			Op: networkingv1beta1firewall.MatchOperationEq,
+		}}
+	} else {
+		return nil, fmt.Errorf("party must specify either a resource group or a namespace")
 	}
 
 	return matchRules, nil

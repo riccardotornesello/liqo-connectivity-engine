@@ -102,3 +102,13 @@ func GetPodsInOffloadedNamespaces(ctx context.Context, cl client.Client) ([]core
 
 	return pods, nil
 }
+
+// GetPodsInNamespace returns the list of pods in the specified namespace.
+func GetPodsInNamespace(ctx context.Context, cl client.Client, namespace string) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := cl.List(ctx, podList, client.InNamespace(namespace)); err != nil {
+		return nil, err
+	}
+
+	return podList.Items, nil
+}

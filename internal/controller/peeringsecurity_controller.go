@@ -45,7 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	securityv1 "github.com/riccardotornesello/liqo-security-manager/api/v1"
-	"github.com/riccardotornesello/liqo-security-manager/internal/controller/forge"
+	"github.com/riccardotornesello/liqo-security-manager/internal/controller/fabric"
 	"github.com/riccardotornesello/liqo-security-manager/internal/controller/utils"
 )
 
@@ -137,7 +137,7 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 			if err == nil {
 				fabricFwcfg := networkingv1beta1.FirewallConfiguration{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      forge.ForgeFabricResourceName(clusterID),
+						Name:      fabric.ForgeFabricResourceName(clusterID),
 						Namespace: req.Namespace,
 					},
 				}
@@ -188,7 +188,7 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	// firewall rules at the network level.
 	fabricFwcfg := networkingv1beta1.FirewallConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      forge.ForgeFabricResourceName(clusterID),
+			Name:      fabric.ForgeFabricResourceName(clusterID),
 			Namespace: req.Namespace,
 		},
 	}
@@ -196,10 +196,10 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	fabricOp, err := controllerutil.CreateOrUpdate(ctx, r.Client, &fabricFwcfg, func() error {
 		// Set labels that identify this FirewallConfiguration as a fabric-level
 		// security configuration targeting all nodes.
-		fabricFwcfg.SetLabels(forge.ForgeFabricLabels(clusterID))
+		fabricFwcfg.SetLabels(fabric.ForgeFabricLabels(clusterID))
 
 		// Generate the FirewallConfiguration spec based on the PeeringConnectivity rules.
-		spec, err := forge.ForgeFabricSpec(ctx, r.Client, cfg, clusterID)
+		spec, err := fabric.ForgeFabricSpec(ctx, r.Client, cfg, clusterID)
 		if err != nil {
 			return err
 		}
