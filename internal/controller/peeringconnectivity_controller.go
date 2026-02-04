@@ -68,12 +68,12 @@ const (
 	EventReasonSynced = "Synced"
 
 	// FinalizerName is the name of the finalizer added to PeeringConnectivity resources.
-	FinalizerName = "peeringconnectivity-controller.security.liqo.io/finalizer"
+	FinalizerName = "peeringconnectivity-controller.connectivity.liqo.io/finalizer"
 )
 
-// +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=security.liqo.io,resources=peeringconnectivities/finalizers,verbs=update
+// +kubebuilder:rbac:groups=connectivity.liqo.io,resources=peeringconnectivities,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=connectivity.liqo.io,resources=peeringconnectivities/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=connectivity.liqo.io,resources=peeringconnectivities/finalizers,verbs=update
 
 // NewPeeringConnectivityReconciler creates a new PeeringConnectivityReconciler.
 // It initializes the reconciler with the necessary client, scheme, and event recorder

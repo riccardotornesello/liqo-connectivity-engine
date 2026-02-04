@@ -1,4 +1,4 @@
-apiVersion: security.liqo.io/v1
+apiVersion: connectivity.liqo.io/v1
 kind: PeeringConnectivity
 metadata:
   labels:

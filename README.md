@@ -85,7 +85,7 @@ kubectl apply -f https://raw.githubusercontent.com/riccardotornesello/liqo-conne
 1. **Create a PeeringConnectivity resource** for your peered cluster:
 
 ```yaml
-apiVersion: security.liqo.io/v1
+apiVersion: connectivity.liqo.io/v1
 kind: PeeringConnectivity
 metadata:
   name: remote-cluster-id

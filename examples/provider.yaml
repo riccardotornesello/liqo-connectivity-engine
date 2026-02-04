@@ -18,7 +18,7 @@
 # communicate with their originating cluster, preventing unauthorized access
 # to provider cluster resources.
 
-apiVersion: security.liqo.io/v1
+apiVersion: connectivity.liqo.io/v1
 kind: PeeringConnectivity
 metadata:
   # Name should match the cluster ID of the peered cluster

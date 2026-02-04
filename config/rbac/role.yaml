@@ -5,7 +5,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - security.liqo.io
+  - connectivity.liqo.io
   resources:
   - peeringconnectivities
   verbs:
@@ -17,13 +17,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - security.liqo.io
+  - connectivity.liqo.io
   resources:
   - peeringconnectivities/finalizers
   verbs:
   - update
 - apiGroups:
-  - security.liqo.io
+  - connectivity.liqo.io
   resources:
   - peeringconnectivities/status
   verbs:

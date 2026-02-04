@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: peeringconnectivities.security.liqo.io
+  name: peeringconnectivities.connectivity.liqo.io
 spec:
-  group: security.liqo.io
+  group: connectivity.liqo.io
   names:
     kind: PeeringConnectivity
     listKind: PeeringConnectivityList

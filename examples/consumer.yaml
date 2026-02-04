@@ -16,7 +16,7 @@
 # This ensures that only the virtual cluster abstraction can communicate,
 # preventing direct access from the remote cluster.
 
-apiVersion: security.liqo.io/v1
+apiVersion: connectivity.liqo.io/v1
 kind: PeeringConnectivity
 metadata:
   # Name should match the cluster ID of the peered cluster
