@@ -15,26 +15,26 @@
 package utils
 
 import (
-	"fmt"
+	"context"
 
-	tenantnamespace "github.com/liqotech/liqo/pkg/tenantNamespace"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetClusterNamespace returns the Liqo tenant namespace for a given cluster ID.
-// Liqo uses namespaces with the format "liqo-tenant-<cluster-id>" to isolate
-// resources for each peered cluster.
-func GetClusterNamespace(clusterID string) string {
-	return fmt.Sprintf("%s-%s", tenantnamespace.NamePrefix, clusterID)
-}
+// GetOffloadedNamespaces returns the list of namespaces offloaded to the current provider.
+// If the current cluster is a consumer, it returns an empty list.
+func GetOffloadedNamespaces(ctx context.Context, cl client.Client, clusterID string) ([]corev1.Namespace, error) {
+	selector := labels.NewSelector()
+	reqEqual, _ := labels.NewRequirement("liqo.io/remote-cluster-id", selection.Equals, []string{clusterID})
+	reqNotExist, _ := labels.NewRequirement("liqo.io/tenant-namespace", selection.DoesNotExist, nil)
+	selector = selector.Add(*reqEqual, *reqNotExist)
 
-// ExtractClusterIDFromNamespace extracts the cluster ID from a Liqo tenant namespace name.
-// It removes the "liqo-tenant-" prefix to obtain the cluster ID.
-// Returns an error if the namespace doesn't follow the expected format.
-func ExtractClusterIDFromNamespace(namespace string) (string, error) {
-	const prefix = tenantnamespace.NamePrefix + "-"
-
-	if len(namespace) <= len(prefix) || namespace[:len(prefix)] != prefix {
-		return "", fmt.Errorf("namespace %q does not have the expected prefix %q", namespace, prefix)
+	namespaceList := &corev1.NamespaceList{}
+	if err := cl.List(ctx, namespaceList, &client.ListOptions{LabelSelector: selector}); err != nil {
+		return nil, err
 	}
-	return namespace[len(prefix):], nil
+
+	return namespaceList.Items, nil
 }

@@ -23,7 +23,12 @@ import (
 	offloadingv1beta1 "github.com/liqotech/liqo/apis/offloading/v1beta1"
 	"github.com/liqotech/liqo/pkg/consts"
 	vkforge "github.com/liqotech/liqo/pkg/virtualKubelet/forge"
+	connectivityv1 "github.com/riccardotornesello/liqo-connectivity-engine/api/v1"
+	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/gateway"
+	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/networkpolicy"
+	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,10 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	connectivityv1 "github.com/riccardotornesello/liqo-connectivity-engine/api/v1"
-	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/fabric"
-	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
 )
 
 // PeeringConnectivityReconciler reconciles a PeeringConnectivity object.
@@ -53,10 +54,15 @@ type PeeringConnectivityReconciler struct {
 const (
 	// ConditionReasonClusterIDError indicates that the cluster ID could not be extracted from the namespace.
 	ConditionReasonClusterIDError = "ClusterIDExtractionFailed"
-	// ConditionReasonFabricSyncFailed indicates that the FirewallConfiguration failed to sync.
-	ConditionReasonFabricSyncFailed = "FabricSyncFailed"
-	// ConditionReasonFabricSynced indicates that the FirewallConfiguration was successfully synced.
-	ConditionReasonFabricSynced = "FabricSynced"
+
+	// ConditionReasonGatewaySyncFailed indicates that the FirewallConfiguration failed to sync.
+	ConditionReasonGatewaySyncFailed = "GatewaySyncFailed"
+	// ConditionReasonNetworkPolicySyncFailed indicates that the NetworkPolicy failed to sync.
+	ConditionReasonNetworkPolicySyncFailed = "NetworkPolicySyncFailed"
+
+	// ConditionReasonSynced indicates that the resource has been successfully synced.
+	ConditionReasonSynced = "Synced"
+
 	// ConditionReasonDeletionFailed indicates that resource deletion failed during finalization.
 	ConditionReasonDeletionFailed = "DeletionFailed"
 
@@ -135,7 +141,7 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 			}
 
 			// Delete the associated resources
-			if err = fabric.EnsureFabricFirewallConfigurationDeleted(ctx, r.Client, clusterID); err != nil {
+			if err = gateway.EnsureGatewayFirewallConfigurationDeleted(ctx, r.Client, clusterID); err != nil {
 				return ctrl.Result{}, utils.HandleReconcileError(
 					ctx,
 					r.Client,
@@ -144,6 +150,19 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 					cfg,
 					err,
 					"error during FirewallConfiguration deletion",
+					EventReasonDeletionError,
+					ConditionReasonDeletionFailed,
+				)
+			}
+			if err = networkpolicy.EnsureNetworkPoliciesDeleted(ctx, r.Client, clusterID); err != nil {
+				return ctrl.Result{}, utils.HandleReconcileError(
+					ctx,
+					r.Client,
+					logger,
+					r.Recorder,
+					cfg,
+					err,
+					"error during NetworkPolicy deletion",
 					EventReasonDeletionError,
 					ConditionReasonDeletionFailed,
 				)
@@ -184,10 +203,10 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// ACT: reconcile resources.
-	// Create or update the Fabric FirewallConfiguration.
+	// Create or update the FirewallConfiguration and NetworkPolicy.
 	// The FirewallConfiguration is the Liqo resource that implements the actual
 	// firewall rules at the network level.
-	fabricOp, err := fabric.ReconcileFabricFirewallConfiguration(ctx, r.Client, r.Scheme, cfg, clusterID)
+	gatewayOp, err := gateway.ReconcileGatewayFirewallConfiguration(ctx, r.Client, r.Scheme, cfg, clusterID)
 	if err != nil {
 		return ctrl.Result{}, utils.HandleReconcileError(
 			ctx,
@@ -196,13 +215,28 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 			r.Recorder,
 			cfg,
 			err,
-			"unable to reconcile fabric firewall configuration",
+			"unable to reconcile gateway firewall configuration",
 			EventReasonReconcileError,
-			ConditionReasonFabricSyncFailed,
+			ConditionReasonGatewaySyncFailed,
 		)
 	}
 
-	logger.Info("reconciliation completed", "fabricOp", fabricOp)
+	err = networkpolicy.ReconcileNetworkPolicies(ctx, r.Client, r.Scheme, cfg, clusterID)
+	if err != nil {
+		return ctrl.Result{}, utils.HandleReconcileError(
+			ctx,
+			r.Client,
+			logger,
+			r.Recorder,
+			cfg,
+			err,
+			"unable to reconcile network policies",
+			EventReasonReconcileError,
+			ConditionReasonNetworkPolicySyncFailed,
+		)
+	}
+
+	logger.Info("reconciliation completed", "gatewayOp", gatewayOp)
 
 	// Update status to reflect successful reconciliation.
 	cfg.Status.ObservedGeneration = cfg.Generation
@@ -210,8 +244,8 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	meta.SetStatusCondition(&cfg.Status.Conditions, metav1.Condition{
 		Type:    utils.ConditionTypeReady,
 		Status:  metav1.ConditionTrue,
-		Reason:  ConditionReasonFabricSynced,
-		Message: "FirewallConfiguration successfully synced",
+		Reason:  ConditionReasonSynced,
+		Message: "Resources successfully synced",
 	})
 
 	if err := r.Status().Update(ctx, cfg); err != nil {
@@ -220,9 +254,11 @@ func (r *PeeringConnectivityReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// Emit an event if the FirewallConfiguration was created or updated.
-	if fabricOp != controllerutil.OperationResultNone {
-		r.Recorder.Eventf(cfg, corev1.EventTypeNormal, EventReasonSynced, "FirewallConfiguration %s successfully", fabricOp)
+	if gatewayOp != controllerutil.OperationResultNone {
+		r.Recorder.Eventf(cfg, corev1.EventTypeNormal, EventReasonSynced, "FirewallConfiguration %s successfully", gatewayOp)
 	}
+
+	// TODO: emit events for NetworkPolicy operations too.
 
 	return ctrl.Result{}, nil
 }
@@ -324,17 +360,38 @@ func (r *PeeringConnectivityReconciler) allPeeringConnectivityEnqueuer(ctx conte
 	return requests
 }
 
+func (r *PeeringConnectivityReconciler) networkPolicyEnqueuer(ctx context.Context, obj client.Object) []ctrl.Request {
+	logger := log.FromContext(ctx)
+
+	networkPolicy, ok := obj.(*networkingv1.NetworkPolicy)
+	if !ok {
+		logger.Error(nil, "Expected a NetworkPolicy object but got a different type", "type", fmt.Sprintf("%T", obj))
+		return nil
+	}
+
+	labels := networkPolicy.GetLabels()
+
+	// Get the clusterId from label "liqo.io/remote-cluster-id"
+	clusterId, exists := labels[consts.RemoteClusterID]
+	if !exists {
+		return nil
+	}
+
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: clusterId, Namespace: utils.GetClusterNamespace(clusterId)}}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 // It configures the controller to:
 // - Reconcile PeeringConnectivity resources
 // - Own FirewallConfiguration resources (so they're deleted when the PC is deleted)
-// - Watch Pods, Networks, and NamespaceOffloadings to trigger reconciliation when they change
+// - Watch Pods, Networks, NetworkPolicies, and NamespaceOffloadings to trigger reconciliation when they change
 func (r *PeeringConnectivityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&connectivityv1.PeeringConnectivity{}).
 		Owns(&networkingv1beta1.FirewallConfiguration{}).
 		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podEnqueuer)).
 		Watches(&ipamv1alpha1.Network{}, handler.EnqueueRequestsFromMapFunc(r.networkEnqueuer)).
+		Watches(&networkingv1.NetworkPolicy{}, handler.EnqueueRequestsFromMapFunc(r.networkPolicyEnqueuer)).
 		Watches(&offloadingv1beta1.NamespaceOffloading{}, handler.EnqueueRequestsFromMapFunc(r.allPeeringConnectivityEnqueuer)).
 		Named("peeringconnectivity").
 		Complete(r)

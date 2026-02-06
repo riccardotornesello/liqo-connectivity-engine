@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Namespaces Utilities", func() {
+var _ = Describe("Clusters Utilities", func() {
 	Describe("GetClusterNamespace", func() {
 		It("should return the correct namespace for a cluster ID", func() {
 			clusterID := "test-cluster-123"
