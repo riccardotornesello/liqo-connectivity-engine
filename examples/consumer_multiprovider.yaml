@@ -31,3 +31,19 @@ spec:
     - source:
         group: vc-remote
       action: "allow"
+---
+apiVersion: connectivity.liqo.io/v1
+kind: PeeringConnectivity
+metadata:
+  # Name should match the cluster ID of the peered cluster
+  name: venice
+  # Namespace follows the pattern: liqo-tenant-<cluster-id>
+  namespace: liqo-tenant-venice
+spec:
+  rules:
+    # Rule 1: Allow all traffic from shadow pods (vc-remote)
+    # These are the local shadow pods that represent workloads offloaded to the provider.
+    # They need to communicate freely.
+    - source:
+        group: vc-remote
+      action: "allow"
