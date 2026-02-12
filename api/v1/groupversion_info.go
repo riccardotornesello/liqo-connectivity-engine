@@ -18,7 +18,7 @@
 // fine-grained network connectivity policies for Liqo multi-cluster environments.
 // The API allows users to control traffic flow between different resource groups
 // in a peering scenario, such as local cluster pods, remote cluster pods,
-// offloaded workloads, and virtual cluster components.
+// offloaded workloads, and resource slice components.
 //
 // +kubebuilder:object:generate=true
 // +groupName=connectivity.liqo.io

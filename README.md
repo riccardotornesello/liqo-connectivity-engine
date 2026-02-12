@@ -12,7 +12,7 @@ In a Liqo multi-cluster deployment, workloads can be offloaded from one cluster 
 - **Local cluster pods**: Pods running in the local cluster's own pod CIDR
 - **Remote cluster pods**: Pods running in a remote peered cluster's pod CIDR
 - **Offloaded pods**: Workloads that have been offloaded from a consumer to a provider cluster
-- **Virtual cluster pods**: Local and remote pods in namespaces configured for offloading
+- **Resource slice pods**: Local and remote pods in namespaces configured for offloading
 
 The connectivity engine translates high-level security rules into low-level firewall configurations that are applied to the Liqo fabric network using nftables.
 
@@ -20,7 +20,7 @@ The connectivity engine translates high-level security rules into low-level fire
 
 - **Fine-grained traffic control**: Define allow/deny rules for traffic between different resource groups
 - **Dynamic pod tracking**: Automatically tracks and updates firewall rules as pods are created, deleted, or offloaded
-- **Multi-cluster aware**: Understands Liqo's multi-cluster topology and virtual cluster concepts
+- **Multi-cluster aware**: Understands Liqo's multi-cluster topology and resource slice concepts
 - **Kubernetes-native**: Uses Custom Resource Definitions (CRDs) for policy configuration
 - **Integration with Liqo**: Seamlessly integrates with Liqo's networking stack
 
@@ -136,8 +136,8 @@ The following resource groups can be used in security rules:
 | `local-cluster`   | Pods in the local cluster's pod CIDR             | Restrict access from local workloads         |
 | `remote-cluster`  | Pods in the remote cluster's pod CIDR            | Control access from remote cluster           |
 | `offloaded`       | Pods offloaded from consumer to provider         | Isolate offloaded workloads on provider      |
-| `vc-local`        | Local pods in namespaces with offloading enabled | Control access to potentially offloaded pods |
-| `vc-remote`       | Shadow pods representing offloaded workloads     | Manage traffic to remote offloaded pods      |
+| `slice-local`        | Local pods in namespaces with offloading enabled | Control access to potentially offloaded pods |
+| `slice-remote`       | Shadow pods representing offloaded workloads     | Manage traffic to remote offloaded pods      |
 | `private-subnets` | Private subnet IPs according to RFC1918          | Restrict access to private networks          |
 
 ## Examples

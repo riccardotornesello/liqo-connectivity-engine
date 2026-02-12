@@ -16,8 +16,8 @@ Before using these examples, understand the resource groups:
 - **local-cluster**: Pods in the local cluster's pod CIDR
 - **remote-cluster**: Pods in the remote cluster's pod CIDR
 - **offloaded**: Pods that were offloaded from consumer to provider
-- **vc-local**: Local pods in namespaces with offloading enabled
-- **vc-remote**: Shadow pods representing offloaded workloads
+- **slice-local**: Local pods in namespaces with offloading enabled
+- **slice-remote**: Shadow pods representing offloaded workloads
 
 ## Basic Usage
 
@@ -62,14 +62,14 @@ spec:
   rules:
     # Allow specific source to specific destination
     - source:
-        group: vc-local
+        group: slice-local
       destination:
         group: offloaded
       action: "allow"
 
     # Allow specific source to any destination
     - source:
-        group: vc-remote
+        group: slice-remote
       action: "allow"
 
     # Deny traffic to specific destination
@@ -87,14 +87,14 @@ spec:
   rules:
     # More specific rules should come first
     - source:
-        group: vc-remote
+        group: slice-remote
       destination:
         group: remote-cluster
       action: "allow"
 
     # More general rules should come later
     - source:
-        group: vc-remote
+        group: slice-remote
       action: "deny"
 ```
 
@@ -148,8 +148,8 @@ After applying a PeeringConnectivity resource:
 Some pods may not fall into the expected resource groups:
 
 - Check pod labels (liqo.io/local-pod, liqo.io/origin-cluster-id)
-- Verify namespace has NamespaceOffloading resource (for vc-local)
-- Check pod scheduling node (for vc-remote)
+- Verify namespace has NamespaceOffloading resource (for slice-local)
+- Check pod scheduling node (for slice-remote)
 
 ## Best Practices
 

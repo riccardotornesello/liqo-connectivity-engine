@@ -22,10 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// vc-local: Matches local pods in namespaces that are configured for offloading.
+// slice-local: Matches local pods in namespaces that are configured for offloading.
 // These are the actual pods running locally that could be offloaded.
 // Uses a set because pod IPs are dynamically allocated.
-var ResourceGroupVcLocal = groupFuncts{
+var ResourceGroupSliceLocal = groupFuncts{
 	MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 		// Get all pods in namespaces that are configured for offloading.
 		pods, err := utils.GetPodsInOffloadedNamespaces(ctx, cl)
@@ -48,10 +48,10 @@ var ResourceGroupVcLocal = groupFuncts{
 	},
 }
 
-// vc-remote: Matches shadow pods on the consumer cluster that represent
+// slice-remote: Matches shadow pods on the consumer cluster that represent
 // pods offloaded to a provider cluster.
 // Uses a set because pod IPs are dynamically allocated.
-var ResourceGroupVcRemote = groupFuncts{
+var ResourceGroupSliceRemote = groupFuncts{
 	MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 		// Get all shadow pods that represent offloaded pods on the specified provider cluster.
 		pods, err := utils.GetPodsOffloadedToProvider(ctx, cl, clusterID)

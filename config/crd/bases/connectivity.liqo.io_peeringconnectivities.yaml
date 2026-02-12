@@ -77,8 +77,8 @@ spec:
                           - remote-cluster
                           - leaf
                           - offloaded
-                          - vc-local
-                          - vc-remote
+                          - slice-local
+                          - slice-remote
                           - internet
                           type: string
                         namespace:
@@ -104,8 +104,8 @@ spec:
                           - remote-cluster
                           - leaf
                           - offloaded
-                          - vc-local
-                          - vc-remote
+                          - slice-local
+                          - slice-remote
                           - internet
                           type: string
                         namespace:

@@ -126,8 +126,8 @@ func ForgeNetworkPolicyPeer(ctx context.Context, cl client.Client, clusterID str
 					},
 				},
 			}}, nil
-		// TODO: connectivityv1.ResourceGroupVcRemote
-		case connectivityv1.ResourceGroupVcRemote:
+		// TODO: connectivityv1.ResourceGroupSliceRemote
+		case connectivityv1.ResourceGroupSliceRemote:
 			return []networkingv1.NetworkPolicyPeer{{
 				PodSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
