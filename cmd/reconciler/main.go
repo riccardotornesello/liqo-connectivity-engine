@@ -23,11 +23,13 @@ import (
 	"fmt"
 	"os"
 
+	corev1beta1 "github.com/liqotech/liqo/apis/core/v1beta1"
 	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller"
 	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,14 +40,10 @@ import (
 
 func main() {
 	var clusterID string
+	var clusterIds []string
 
 	flag.StringVar(&clusterID, "cluster-id", "", "The ID of the cluster to test the controller with.")
 	flag.Parse()
-
-	if clusterID == "" {
-		fmt.Println("Error: cluster-id flag is required")
-		os.Exit(1)
-	}
 
 	opts := zap.Options{Development: true}
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -54,9 +52,26 @@ func main() {
 
 	scheme := runtime.NewScheme()
 	utils.RegisterScheme(scheme)
+	utilruntime.Must(corev1beta1.AddToScheme(scheme))
 
 	cl, _ := client.New(cfg, client.Options{Scheme: scheme})
 
+	// Get the list of clusters to be parsed
+	if clusterID != "" {
+		clusterIds = append(clusterIds, clusterID)
+	} else {
+		clustersList := &corev1beta1.ForeignClusterList{}
+		if err := cl.List(context.Background(), clustersList); err != nil {
+			fmt.Printf("Error listing ForeignClusters: %v\n", err)
+			os.Exit(1)
+		}
+
+		for _, cluster := range clustersList.Items {
+			clusterIds = append(clusterIds, string(cluster.Spec.ClusterID))
+		}
+	}
+
+	// Run the reconciler for each cluster ID.
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
 	recorder := eventBroadcaster.NewRecorder(scheme, v1.EventSource{Component: "my-manual-controller"})
@@ -67,18 +82,22 @@ func main() {
 		Recorder: recorder,
 	}
 
-	req := reconcile.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      clusterID,
-			Namespace: fmt.Sprintf("liqo-tenant-%s", clusterID),
-		},
-	}
+	for _, clusterID := range clusterIds {
+		fmt.Printf("Running reconciler for cluster ID: %s\n", clusterID)
 
-	res, err := reconciler.Reconcile(context.Background(), req)
-	fmt.Printf("Result: %+v, Error: %v\n", res, err)
+		req := reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      clusterID,
+				Namespace: fmt.Sprintf("liqo-tenant-%s", clusterID),
+			},
+		}
 
-	// Exit with an error code if reconciliation failed.
-	if err != nil {
-		os.Exit(1)
+		res, err := reconciler.Reconcile(context.Background(), req)
+		fmt.Printf("Result: %+v, Error: %v\n", res, err)
+
+		// Exit with an error code if reconciliation failed.
+		if err != nil {
+			os.Exit(1)
+		}
 	}
 }
