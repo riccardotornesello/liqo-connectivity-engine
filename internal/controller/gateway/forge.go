@@ -111,6 +111,18 @@ func ForgeGatewaySpec(ctx context.Context, cl client.Client, cfg *connectivityv1
 								Op: networkingv1beta1firewall.MatchOperationNeq,
 							}},
 						},
+						{
+							// Always allow traffic to eth0
+							Name:   ptr.To("allow-eth0"),
+							Action: networkingv1beta1firewall.ActionAccept,
+							Match: []networkingv1beta1firewall.Match{{
+								Dev: &networkingv1beta1firewall.MatchDev{
+									Position: networkingv1beta1firewall.MatchDevPositionOut,
+									Value:    "eth0",
+								},
+								Op: networkingv1beta1firewall.MatchOperationEq,
+							}},
+						},
 					},
 				},
 			}},
