@@ -143,8 +143,8 @@ func ForgeFabricSpec(ctx context.Context, cl client.Client, cfg *connectivityv1.
 	// Create firewall sets for all resource groups that require them.
 	// Sets contain collections of IP addresses (e.g., pod IPs) that can be referenced in rules.
 	for rg := range usedResourceGroups {
-		if resourcegroups.ResourceGroupFuncts[rg].MakeSets != nil {
-			sets, err := resourcegroups.ResourceGroupFuncts[rg].MakeSets(ctx, cl, clusterID)
+		if resourcegroups.ResourceGroupFuncts[rg].MakeFirewallConfigurationSets != nil {
+			sets, err := resourcegroups.ResourceGroupFuncts[rg].MakeFirewallConfigurationSets(ctx, cl, clusterID)
 			if err != nil {
 				return nil, err
 			}
@@ -187,7 +187,7 @@ func ForgeMatchRule(
 
 	if party.Group != nil {
 		// Generate match rules for the specified resource group.
-		matchRules, err = resourcegroups.ResourceGroupFuncts[*party.Group].MakeMatchRule(ctx, cl, clusterID, position)
+		matchRules, err = resourcegroups.ResourceGroupFuncts[*party.Group].MakeFirewallConfigurationRule(ctx, cl, clusterID, position)
 		if err != nil {
 			return nil, err
 		}

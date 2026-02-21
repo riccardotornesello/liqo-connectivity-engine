@@ -18,7 +18,10 @@ import (
 	"context"
 
 	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
+	"github.com/liqotech/liqo/pkg/consts"
 	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,7 +29,7 @@ import (
 // and are running on this provider cluster.
 // Uses a set because pod IPs are dynamically allocated and may not be contiguous.
 var ResourceGroupOffloaded = groupFuncts{
-	MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
+	MakeFirewallConfigurationSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 		// Get all pods offloaded from the consumer cluster.
 		pods, err := utils.GetPodsFromConsumer(ctx, cl, clusterID)
 		if err != nil {
@@ -37,7 +40,7 @@ var ResourceGroupOffloaded = groupFuncts{
 		podIpsSet := utils.ForgePodIpsSet("offloaded", pods)
 		return []networkingv1beta1firewall.Set{podIpsSet}, nil
 	},
-	MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+	MakeFirewallConfigurationRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 		return []networkingv1beta1firewall.Match{{
 			IP: &networkingv1beta1firewall.MatchIP{
 				Value:    "@offloaded",
@@ -45,5 +48,22 @@ var ResourceGroupOffloaded = groupFuncts{
 			},
 			Op: networkingv1beta1firewall.MatchOperationEq,
 		}}, nil
+	},
+	MakeNetworkPolicyRule: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1.NetworkPolicyPeer, []networkingv1.NetworkPolicyPort, error) {
+		return []networkingv1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      consts.RemoteClusterID,
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{clusterID},
+					},
+					{
+						Key:      consts.TenantNamespaceLabel,
+						Operator: metav1.LabelSelectorOpDoesNotExist,
+					},
+				},
+			},
+		}}, nil, nil
 	},
 }

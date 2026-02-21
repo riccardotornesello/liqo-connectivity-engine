@@ -22,7 +22,7 @@ import (
 // It categorizes different types of pods and network entities to enable fine-grained
 // network connectivity policy management across cluster boundaries.
 //
-// +kubebuilder:validation:Enum=local-cluster;remote-cluster;leaf;offloaded;slice-local;slice-remote;internet
+// +kubebuilder:validation:Enum=local-cluster;remote-cluster;leaf;offloaded;slice-local;slice-remote;internet;nameserver
 type ResourceGroup string
 
 const (
@@ -53,6 +53,9 @@ const (
 	// Internet represents all public IP ranges except those described in RFC1918.
 	// This group is used to match traffic destined to public IP addresses.
 	ResourceGroupInternet ResourceGroup = "internet"
+
+	// Nameserver represents ANY NAMESERVER since it matches against port 53, which is used for DNS queries.
+	ResourceGroupNameserver ResourceGroup = "nameserver"
 )
 
 // Action defines the action to take when a firewall rule matches network traffic.

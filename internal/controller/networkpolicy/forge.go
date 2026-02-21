@@ -18,9 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/liqotech/liqo/pkg/consts"
 	connectivityv1 "github.com/riccardotornesello/liqo-connectivity-engine/api/v1"
-	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
+	"github.com/riccardotornesello/liqo-connectivity-engine/internal/resourcegroups"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,28 +40,28 @@ func ForgeProviderNetworkPolicySpec(
 	// Add rules based on the PeeringConnectivity configuration.
 	for _, rule := range cfg.Spec.Rules {
 		if rule.Source != nil && rule.Source.Group != nil && *rule.Source.Group == connectivityv1.ResourceGroupOffloaded {
-			to, err := ForgeNetworkPolicyPeer(ctx, cl, clusterID, rule.Destination)
+			to, toPorts, err := ForgeNetworkPolicyPeer(ctx, cl, clusterID, rule.Destination)
 			if err != nil {
 				return nil, fmt.Errorf("failed to forge network policy peer for rule destination: %w", err)
 			}
-			spec.Egress = append(spec.Egress, networkingv1.NetworkPolicyEgressRule{To: to})
+			spec.Egress = append(spec.Egress, networkingv1.NetworkPolicyEgressRule{To: to, Ports: toPorts})
 		}
 
 		if rule.Destination != nil && rule.Destination.Group != nil && *rule.Destination.Group == connectivityv1.ResourceGroupOffloaded {
-			from, err := ForgeNetworkPolicyPeer(ctx, cl, clusterID, rule.Source)
+			from, fromPorts, err := ForgeNetworkPolicyPeer(ctx, cl, clusterID, rule.Source)
 			if err != nil {
 				return nil, fmt.Errorf("failed to forge network policy peer for rule source: %w", err)
 			}
-			spec.Ingress = append(spec.Ingress, networkingv1.NetworkPolicyIngressRule{From: from})
+			spec.Ingress = append(spec.Ingress, networkingv1.NetworkPolicyIngressRule{From: from, Ports: fromPorts})
 		}
 	}
 
 	return &spec, nil
 }
 
-func ForgeNetworkPolicyPeer(ctx context.Context, cl client.Client, clusterID string, peer *connectivityv1.Party) ([]networkingv1.NetworkPolicyPeer, error) {
+func ForgeNetworkPolicyPeer(ctx context.Context, cl client.Client, clusterID string, peer *connectivityv1.Party) ([]networkingv1.NetworkPolicyPeer, []networkingv1.NetworkPolicyPort, error) {
 	if peer == nil {
-		return nil, fmt.Errorf("party is nil")
+		return nil, nil, fmt.Errorf("party is nil")
 	}
 
 	if peer.Namespace != nil {
@@ -72,84 +71,12 @@ func ForgeNetworkPolicyPeer(ctx context.Context, cl client.Client, clusterID str
 					"kubernetes.io/metadata.name": *peer.Namespace,
 				},
 			},
-		}}, nil
+		}}, nil, nil
 	}
 
 	if peer.Group != nil {
-		switch *peer.Group {
-		case connectivityv1.ResourceGroupLocalCluster:
-			cidr, err := utils.GetCurrentClusterPodCIDR(ctx, cl)
-			if err != nil {
-				return nil, err
-			}
-
-			return []networkingv1.NetworkPolicyPeer{{
-				IPBlock: &networkingv1.IPBlock{
-					CIDR: cidr,
-				},
-			}}, nil
-		case connectivityv1.ResourceGroupRemoteCluster:
-			cidr, err := utils.GetRemoteClusterPodCIDR(ctx, cl, clusterID)
-			if err != nil {
-				return nil, err
-			}
-
-			return []networkingv1.NetworkPolicyPeer{{
-				IPBlock: &networkingv1.IPBlock{
-					CIDR: cidr,
-				},
-			}}, nil
-		case connectivityv1.ResourceGroupLeaf:
-			cidr, err := utils.GetRemoteClusterExternalCIDR(ctx, cl, clusterID)
-			if err != nil {
-				return nil, err
-			}
-
-			return []networkingv1.NetworkPolicyPeer{{
-				IPBlock: &networkingv1.IPBlock{
-					CIDR: cidr,
-				},
-			}}, nil
-		case connectivityv1.ResourceGroupOffloaded:
-			return []networkingv1.NetworkPolicyPeer{{
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      consts.RemoteClusterID,
-							Operator: metav1.LabelSelectorOpIn,
-							Values:   []string{clusterID},
-						},
-						{
-							Key:      consts.TenantNamespaceLabel,
-							Operator: metav1.LabelSelectorOpDoesNotExist,
-						},
-					},
-				},
-			}}, nil
-		// TODO: connectivityv1.ResourceGroupSliceRemote
-		case connectivityv1.ResourceGroupSliceRemote:
-			return []networkingv1.NetworkPolicyPeer{{
-				PodSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						consts.LocalPodLabelKey: consts.LocalPodLabelValue,
-					},
-				},
-			}}, nil
-		case connectivityv1.ResourceGroupInternet:
-			return []networkingv1.NetworkPolicyPeer{{
-				IPBlock: &networkingv1.IPBlock{
-					CIDR: "0.0.0.0/0",
-					Except: []string{
-						"10.0.0.0/8",
-						"172.16.0.0/12",
-						"192.168.0.0/16",
-					},
-				},
-			}}, nil
-		default:
-			return nil, fmt.Errorf("unsupported resource group: %s", *peer.Group)
-		}
+		return resourcegroups.ResourceGroupFuncts[*peer.Group].MakeNetworkPolicyRule(ctx, cl, clusterID)
 	}
 
-	return nil, fmt.Errorf("unsupported party configuration: %+v", peer)
+	return nil, nil, fmt.Errorf("unsupported party configuration: %+v", peer)
 }

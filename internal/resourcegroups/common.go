@@ -18,6 +18,7 @@ import (
 	"context"
 
 	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
+	networkingv1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	connectivityv1 "github.com/riccardotornesello/liqo-connectivity-engine/api/v1"
@@ -25,13 +26,15 @@ import (
 
 // groupFuncts defines the functions needed to implement a resource group.
 // Each resource group needs to provide:
-//   - MakeSets: creates firewall sets (collections of IP addresses) for the group.
+//   - MakeFirewallConfigurationSets: creates firewall sets (collections of IP addresses) for the group.
 //     May be nil if the resource group uses CIDR-based matching instead of sets.
-//   - MakeMatchRule: creates firewall match rules for the group.
+//   - MakeFirewallConfigurationRule: creates firewall match rules for the group.
 //     Required for all resource groups.
+//   - MakeNetworkPolicyRule: creates NetworkPolicyPeer objects for the group (used in NetworkPolicies).
 type groupFuncts struct {
-	MakeSets      func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error)
-	MakeMatchRule func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error)
+	MakeFirewallConfigurationSets func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error)
+	MakeFirewallConfigurationRule func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error)
+	MakeNetworkPolicyRule         func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1.NetworkPolicyPeer, []networkingv1.NetworkPolicyPort, error)
 }
 
 // ResourceGroupFuncts maps each ResourceGroup to its implementation functions.
@@ -48,5 +51,6 @@ var ResourceGroupFuncts = map[connectivityv1.ResourceGroup]groupFuncts{
 	connectivityv1.ResourceGroupSliceLocal:  ResourceGroupSliceLocal,
 	connectivityv1.ResourceGroupSliceRemote: ResourceGroupSliceRemote,
 
-	connectivityv1.ResourceGroupInternet: ResourceGroupInternet,
+	connectivityv1.ResourceGroupInternet:   ResourceGroupInternet,
+	connectivityv1.ResourceGroupNameserver: ResourceGroupNameserver,
 }

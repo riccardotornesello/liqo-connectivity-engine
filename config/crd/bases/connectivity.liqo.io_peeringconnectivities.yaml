@@ -80,6 +80,7 @@ spec:
                           - slice-local
                           - slice-remote
                           - internet
+                          - nameserver
                           type: string
                         namespace:
                           description: Namespace specifies the Kubernetes namespace
@@ -107,6 +108,7 @@ spec:
                           - slice-local
                           - slice-remote
                           - internet
+                          - nameserver
                           type: string
                         namespace:
                           description: Namespace specifies the Kubernetes namespace

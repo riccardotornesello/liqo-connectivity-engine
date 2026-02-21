@@ -19,12 +19,13 @@ import (
 
 	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
 	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
+	networkingv1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // leaf: matches the external CIDR
 var ResourceGroupLeaf = groupFuncts{
-	MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+	MakeFirewallConfigurationRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 		// Get the remote cluster's external CIDR and create a match rule for it.
 		cidr, err := utils.GetRemoteClusterExternalCIDR(ctx, cl, clusterID)
 		if err != nil {
@@ -38,5 +39,17 @@ var ResourceGroupLeaf = groupFuncts{
 			},
 			Op: networkingv1beta1firewall.MatchOperationEq,
 		}}, nil
+	},
+	MakeNetworkPolicyRule: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1.NetworkPolicyPeer, []networkingv1.NetworkPolicyPort, error) {
+		cidr, err := utils.GetRemoteClusterExternalCIDR(ctx, cl, clusterID)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return []networkingv1.NetworkPolicyPeer{{
+			IPBlock: &networkingv1.IPBlock{
+				CIDR: cidr,
+			},
+		}}, nil, nil
 	},
 }

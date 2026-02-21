@@ -18,7 +18,10 @@ import (
 	"context"
 
 	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
+	"github.com/liqotech/liqo/pkg/consts"
 	"github.com/riccardotornesello/liqo-connectivity-engine/internal/controller/utils"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,7 +29,7 @@ import (
 // These are the actual pods running locally that could be offloaded.
 // Uses a set because pod IPs are dynamically allocated.
 var ResourceGroupSliceLocal = groupFuncts{
-	MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
+	MakeFirewallConfigurationSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 		// Get all pods in namespaces that are configured for offloading.
 		pods, err := utils.GetPodsInOffloadedNamespaces(ctx, cl)
 		if err != nil {
@@ -37,7 +40,7 @@ var ResourceGroupSliceLocal = groupFuncts{
 		podIpsSet := utils.ForgePodIpsSet("vclocal", pods)
 		return []networkingv1beta1firewall.Set{podIpsSet}, nil
 	},
-	MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+	MakeFirewallConfigurationRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 		return []networkingv1beta1firewall.Match{{
 			IP: &networkingv1beta1firewall.MatchIP{
 				Value:    "@vclocal",
@@ -46,13 +49,14 @@ var ResourceGroupSliceLocal = groupFuncts{
 			Op: networkingv1beta1firewall.MatchOperationEq,
 		}}, nil
 	},
+	// TODO: make networkpolicy
 }
 
 // slice-remote: Matches shadow pods on the consumer cluster that represent
 // pods offloaded to a provider cluster.
 // Uses a set because pod IPs are dynamically allocated.
 var ResourceGroupSliceRemote = groupFuncts{
-	MakeSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
+	MakeFirewallConfigurationSets: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1beta1firewall.Set, error) {
 		// Get all shadow pods that represent offloaded pods on the specified provider cluster.
 		pods, err := utils.GetPodsOffloadedToProvider(ctx, cl, clusterID)
 		if err != nil {
@@ -63,7 +67,7 @@ var ResourceGroupSliceRemote = groupFuncts{
 		podIpsSet := utils.ForgePodIpsSet("vcremote", pods)
 		return []networkingv1beta1firewall.Set{podIpsSet}, nil
 	},
-	MakeMatchRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
+	MakeFirewallConfigurationRule: func(ctx context.Context, cl client.Client, clusterID string, position networkingv1beta1firewall.MatchPosition) ([]networkingv1beta1firewall.Match, error) {
 		return []networkingv1beta1firewall.Match{{
 			IP: &networkingv1beta1firewall.MatchIP{
 				Value:    "@vcremote",
@@ -71,5 +75,14 @@ var ResourceGroupSliceRemote = groupFuncts{
 			},
 			Op: networkingv1beta1firewall.MatchOperationEq,
 		}}, nil
+	},
+	MakeNetworkPolicyRule: func(ctx context.Context, cl client.Client, clusterID string) ([]networkingv1.NetworkPolicyPeer, []networkingv1.NetworkPolicyPort, error) {
+		return []networkingv1.NetworkPolicyPeer{{
+			PodSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					consts.LocalPodLabelKey: consts.LocalPodLabelValue,
+				},
+			},
+		}}, nil, nil
 	},
 }
